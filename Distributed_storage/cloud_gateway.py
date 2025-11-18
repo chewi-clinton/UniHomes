@@ -107,7 +107,7 @@ class CloudGateway:
                     
                     # Check if node is alive (heartbeat within last 60 seconds)
                     is_alive = (time.time() - last_heartbeat) < 60 if last_heartbeat else False
-                    status_indicator = "🟢" if status == 'online' and is_alive else "🔴"
+                    status_indicator = "[ONLINE]" if status == 'online' and is_alive else "[OFFLINE]"
                     
                     print(f"  {status_indicator} {node_id}")
                     print(f"    Address: {host}:{port}")
@@ -155,7 +155,7 @@ class CloudGateway:
                     self.nodes[node_id] = node_info
                     self.save_database()
                 
-                print(f"🟢 New node registered: {node_id} ({message.get('host')}:{message.get('port')})")
+                print(f"[NEW] New node registered: {node_id} ({message.get('host')}:{message.get('port')})")
                 
                 # Send acknowledgment
                 response = {'type': 'registered', 'status': 'success'}
@@ -194,7 +194,7 @@ class CloudGateway:
             file_size = request.get('file_size')
             file_data = request.get('file_data')
             
-            print(f"📁 Upload request: {filename} ({file_size} bytes)")
+            print(f"[UPLOAD] Upload request: {filename} ({file_size} bytes)")
             
             # Generate file ID and chunk the file
             file_id = str(uuid.uuid4())
@@ -235,7 +235,7 @@ class CloudGateway:
                             'created_at': datetime.now().isoformat()
                         }
                 else:
-                    print(f"❌ Failed to store chunk {chunk_id} on node {selected_node}")
+                    print(f"[ERROR] Failed to store chunk {chunk_id} on node {selected_node}")
             
             # Store file metadata
             if successful_chunks == len(chunks):
@@ -256,7 +256,7 @@ class CloudGateway:
                     'chunks_stored': successful_chunks,
                     'total_chunks': len(chunks)
                 }
-                print(f"✅ File upload complete: {filename} ({successful_chunks}/{len(chunks)} chunks)")
+                print(f"[SUCCESS] File upload complete: {filename} ({successful_chunks}/{len(chunks)} chunks)")
             else:
                 response = {
                     'type': 'upload_error',
@@ -331,7 +331,7 @@ class CloudGateway:
                     for node_id, node_info in list(self.nodes.items()):
                         last_heartbeat = node_info.get('last_heartbeat', 0)
                         if (current_time - last_heartbeat) > 60 and node_info.get('status') == 'online':
-                            print(f"🔴 Node {node_id} marked offline (heartbeat timeout)")
+                            print(f"[OFFLINE] Node {node_id} marked offline (heartbeat timeout)")
                             self.nodes[node_id]['status'] = 'offline'
                             self.save_database()
                 
@@ -383,7 +383,7 @@ class CloudGateway:
             server.bind((self.host, self.node_port))
             server.listen(10)
             
-            print(f"🌐 Node listener started on {self.host}:{self.node_port}")
+            print(f"[LISTEN] Node listener started on {self.host}:{self.node_port}")
             
             while self.running:
                 try:
@@ -404,7 +404,7 @@ class CloudGateway:
             server.bind((self.host, self.upload_port))
             server.listen(10)
             
-            print(f"📁 Upload listener started on {self.host}:{self.upload_port}")
+            print(f"[LISTEN] Upload listener started on {self.host}:{self.upload_port}")
             
             while self.running:
                 try:
@@ -419,7 +419,7 @@ class CloudGateway:
     
     def start(self):
         """Start the cloud gateway"""
-        print("🚀 Starting Cloud Gateway...")
+        print("[START] Starting Cloud Gateway...")
         
         # Start all components in separate threads
         threading.Thread(target=self.start_node_listener, daemon=True).start()
@@ -430,7 +430,7 @@ class CloudGateway:
         try:
             self.display_status()
         except KeyboardInterrupt:
-            print("\n🛑 Shutting down Cloud Gateway...")
+            print("\n[STOP] Shutting down Cloud Gateway...")
             self.running = False
             self.save_database()
 
