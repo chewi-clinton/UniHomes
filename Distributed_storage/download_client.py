@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 """
 File Download Client - Download files from the distributed cloud storage system
@@ -19,7 +20,7 @@ class DownloadClient:
         """Download a file from the cloud storage"""
         try:
             # First get file metadata from cloud gateway
-            print(f"🔍 Looking up file: {file_id}")
+            print(f"[LOOKUP] Looking up file: {file_id}")
             
             # For this demo, we'll simulate getting file metadata
             # In a full implementation, you'd query the cloud gateway
@@ -27,7 +28,7 @@ class DownloadClient:
             # For now, let's create a simple test file download
             # This would be replaced with actual chunk retrieval logic
             
-            print(f"📥 Downloading file: {file_id}")
+            print(f"[DOWNLOAD] Downloading file: {file_id}")
             
             if not output_path:
                 output_path = f"downloaded_{file_id}"
@@ -38,11 +39,11 @@ class DownloadClient:
             with open(output_path, 'w') as f:
                 f.write(test_content)
             
-            print(f"✅ File downloaded to: {output_path}")
+            print(f"[SUCCESS] File downloaded to: {output_path}")
             return True
             
         except Exception as e:
-            print(f"❌ Download error: {e}")
+            print(f"[ERROR] Download error: {e}")
             return False
 
 def main():
@@ -59,15 +60,15 @@ def main():
     
     client = DownloadClient(cloud_host, cloud_port)
     
-    print("🚀 File Download Client")
+    print("[CLIENT] File Download Client")
     print("=" * 50)
     
     success = client.download_file(file_id, output_path)
     
     if success:
-        print("\n🎉 File downloaded successfully!")
+        print("\n[SUCCESS] File downloaded successfully!")
     else:
-        print("\n💥 File download failed!")
+        print("\n[FAILED] File download failed!")
         sys.exit(1)
 
 if __name__ == "__main__":
