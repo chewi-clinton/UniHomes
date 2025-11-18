@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 """
 System Test - Comprehensive testing of the distributed cloud storage system
@@ -20,7 +21,7 @@ class SystemTester:
         
     def log_result(self, test_name, passed, message=""):
         """Log test result"""
-        status = "✅ PASS" if passed else "❌ FAIL"
+        status = "[PASS]" if passed else "[FAIL]"
         self.test_results.append({
             'test': test_name,
             'passed': passed,
@@ -299,7 +300,7 @@ class SystemTester:
     
     def run_all_tests(self):
         """Run all system tests"""
-        print("🧪 Running System Tests")
+        print("[TEST] Running System Tests")
         print("=" * 60)
         print()
         
@@ -324,7 +325,7 @@ class SystemTester:
         
         print()
         print("=" * 60)
-        print("📊 Test Results Summary")
+        print("[SUMMARY] Test Results Summary")
         print("=" * 60)
         
         passed = sum(1 for result in self.test_results if result['passed'])
@@ -336,16 +337,16 @@ class SystemTester:
                 print(f"   {result['message']}")
         
         print()
-        print(f"🎯 Overall: {passed}/{total} tests passed ({passed/total*100:.1f}%)")
+        print(f"[RESULT] Overall: {passed}/{total} tests passed ({passed/total*100:.1f}%)")
         
         if passed == total:
-            print("🎉 All tests passed! System is ready to use.")
+            print("[SUCCESS] All tests passed! System is ready to use.")
         else:
-            print("⚠️  Some tests failed. Please check the issues above.")
+            print("[WARNING] Some tests failed. Please check the issues above.")
         
         # Cleanup
         print()
-        print("🧹 Cleaning up...")
+        print("[CLEANUP] Cleaning up...")
         self.cleanup()
         
         return passed == total
