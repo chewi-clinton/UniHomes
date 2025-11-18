@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 """
 Setup Script - Make all Python files executable and prepare the system
@@ -12,12 +13,12 @@ def make_executable(filepath):
     try:
         current_stat = os.stat(filepath)
         os.chmod(filepath, current_stat.st_mode | stat.S_IEXEC)
-        print(f"✅ Made executable: {filepath}")
+        print(f"[SUCCESS] Made executable: {filepath}")
     except Exception as e:
-        print(f"❌ Failed to make executable: {filepath} - {e}")
+        print(f"[ERROR] Failed to make executable: {filepath} - {e}")
 
 def main():
-    print("🛠️  Setting up Distributed Cloud Storage System")
+    print("[SETUP] Setting up Distributed Cloud Storage System")
     print("=" * 50)
     
     # List of Python files to make executable
@@ -31,15 +32,15 @@ def main():
         'demo.py'
     ]
     
-    print("📁 Making Python files executable...")
+    print("[INFO] Making Python files executable...")
     for file in python_files:
         if os.path.exists(file):
             make_executable(file)
         else:
-            print(f"❌ File not found: {file}")
+            print(f"[ERROR] File not found: {file}")
     
     print()
-    print("🧹 Cleaning up any existing storage directories...")
+    print("[CLEANUP] Cleaning up any existing storage directories...")
     
     # Clean up existing storage directories
     for item in os.listdir('.'):
@@ -47,9 +48,9 @@ def main():
             import shutil
             try:
                 shutil.rmtree(item)
-                print(f"🗑️  Removed: {item}")
+                print(f"[REMOVED] Removed: {item}")
             except Exception as e:
-                print(f"❌ Failed to remove {item}: {e}")
+                print(f"[ERROR] Failed to remove {item}: {e}")
     
     # Clean up database files
     db_files = ['cloud_db.pkl', 'nodes_config.json']
@@ -57,20 +58,20 @@ def main():
         if os.path.exists(db_file):
             try:
                 os.remove(db_file)
-                print(f"🗑️  Removed: {db_file}")
+                print(f"[REMOVED] Removed: {db_file}")
             except Exception as e:
-                print(f"❌ Failed to remove {db_file}: {e}")
+                print(f"[ERROR] Failed to remove {db_file}: {e}")
     
     print()
-    print("✅ Setup complete!")
+    print("[SUCCESS] Setup complete!")
     print()
-    print("🚀 Quick Start:")
+    print("[START] Quick Start:")
     print("1. Start Cloud Gateway: python cloud_gateway.py")
     print("2. Create node: python create_node.py node1 --storage 1")
     print("3. Start node: python start_node.py node1")
     print("4. Upload file: python upload_client.py <file>")
     print()
-    print("🎯 Or run the demo: python demo.py")
+    print("[DEMO] Or run the demo: python demo.py")
 
 if __name__ == "__main__":
     main()
