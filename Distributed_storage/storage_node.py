@@ -45,23 +45,23 @@ class StorageNode:
         
     def boot_sequence(self):
         """Simulate node boot sequence"""
-        print(f"🖥️  Node {self.node_id} booting up...")
+        print(f"[NODE] Node {self.node_id} booting up...")
         
         # Create storage directory and allocate disk space
         self.allocate_storage()
         
         # Check cloud gateway availability
         if self.check_cloud_availability():
-            print(f"✅ Cloud Gateway found at {self.cloud_host}:{self.cloud_port}")
+            print(f"[SUCCESS] Cloud Gateway found at {self.cloud_host}:{self.cloud_port}")
             if self.register_with_cloud():
-                print(f"✅ Node {self.node_id} registered successfully")
+                print(f"[SUCCESS] Node {self.node_id} registered successfully")
                 self.registered = True
             else:
-                print(f"❌ Registration failed")
+                print(f"[ERROR] Registration failed")
                 return False
         else:
-            print(f"❌ Cloud Gateway not available at {self.cloud_host}:{self.cloud_port}")
-            print("🔄 Will retry registration periodically...")
+            print(f"[ERROR] Cloud Gateway not available at {self.cloud_host}:{self.cloud_port}")
+            print("[RETRY] Will retry registration periodically...")
             return False
         
         return True
@@ -88,10 +88,10 @@ class StorageNode:
                     f.write(b'\x00' * write_size)
                     remaining -= write_size
             
-            print(f"💾 Storage allocated: {self.storage_capacity / (1024**3):.2f} GB at {self.storage_dir}")
+            print(f"[STORAGE] Storage allocated: {self.storage_capacity / (1024**3):.2f} GB at {self.storage_dir}")
             
         except Exception as e:
-            print(f"❌ Storage allocation error: {e}")
+            print(f"[ERROR] Storage allocation error: {e}")
             raise
     
     def check_cloud_availability(self):
@@ -135,7 +135,7 @@ class StorageNode:
             return False
             
         except Exception as e:
-            print(f"Registration error: {e}")
+            print(f"[ERROR] Registration error: {e}")
             return False
     
     def send_heartbeat(self):
@@ -165,7 +165,7 @@ class StorageNode:
             return False
             
         except Exception as e:
-            print(f"Heartbeat error: {e}")
+            print(f"[ERROR] Heartbeat error: {e}")
             return False
     
     def handle_chunk_storage(self, conn, addr):
@@ -196,7 +196,7 @@ class StorageNode:
                     self.stats['total_requests'] += 1
                     self.stats['successful_requests'] += 1
             
-            print(f"💾 Chunk stored: {chunk_id} ({len(chunk_data)} bytes)")
+            print(f"[STORAGE] Chunk stored: {chunk_id} ({len(chunk_data)} bytes)")
             
             # Send ACK
             response = {
@@ -207,7 +207,7 @@ class StorageNode:
             self.send_message(conn, json.dumps(response).encode('utf-8'))
             
         except Exception as e:
-            print(f"Chunk storage error: {e}")
+            print(f"[ERROR] Chunk storage error: {e}")
             with self.stats_lock:
                 self.stats['total_requests'] += 1
             
@@ -246,19 +246,19 @@ class StorageNode:
                     'chunk_id': chunk_id,
                     'chunk_data': chunk_data.decode('latin1')  # Encode binary as string
                 }
-                print(f"📤 Chunk retrieved: {chunk_id}")
+                print(f"[RETRIEVE] Chunk retrieved: {chunk_id}")
             else:
                 response = {
                     'type': 'retrieve_ack',
                     'status': 'error',
                     'message': 'Chunk not found'
                 }
-                print(f"❌ Chunk not found: {chunk_id}")
+                print(f"[ERROR] Chunk not found: {chunk_id}")
             
             self.send_message(conn, json.dumps(response).encode('utf-8'))
             
         except Exception as e:
-            print(f"Chunk retrieval error: {e}")
+            print(f"[ERROR] Chunk retrieval error: {e}")
             response = {
                 'type': 'retrieve_ack',
                 'status': 'error',
@@ -281,7 +281,7 @@ class StorageNode:
             print(f"Node ID: {self.node_id}")
             print(f"Address: {self.host}:{self.port}")
             print(f"Cloud Gateway: {self.cloud_host}:{self.cloud_port}")
-            print(f"Registration Status: {'✅ Registered' if self.registered else '❌ Not Registered'}")
+            print(f"Registration Status: {'[REGISTERED]' if self.registered else '[NOT REGISTERED]'}")
             print(f"Uptime: {str(uptime).split('.')[0]}")
             print()
             
@@ -303,7 +303,7 @@ class StorageNode:
             print()
             
             print("SYSTEM STATUS:")
-            print(f"  Status: {'🟢 ONLINE' if self.registered else '🔴 OFFLINE'}")
+            print(f"  Status: {'[ONLINE]' if self.registered else '[OFFLINE]'}")
             if self.last_heartbeat > 0:
                 print(f"  Last Heartbeat: {int(time.time() - self.last_heartbeat)}s ago")
             print()
@@ -356,7 +356,7 @@ class StorageNode:
             server.bind((self.host, self.port))
             server.listen(10)
             
-            print(f"🌐 Node listener started on {self.host}:{self.port}")
+            print(f"[LISTEN] Node listener started on {self.host}:{self.port}")
             
             while self.running:
                 try:
@@ -379,10 +379,10 @@ class StorageNode:
                         
                 except Exception as e:
                     if self.running:
-                        print(f"Listener error: {e}")
+                        print(f"[ERROR] Listener error: {e}")
                         
         except Exception as e:
-            print(f"Failed to start listener: {e}")
+            print(f"[ERROR] Failed to start listener: {e}")
     
     def heartbeat_loop(self):
         """Send periodic heartbeats to Cloud Gateway"""
@@ -390,30 +390,30 @@ class StorageNode:
             try:
                 if self.registered:
                     if self.send_heartbeat():
-                        print(f"❤️  Heartbeat sent successfully")
+                        print(f"[HEARTBEAT] Heartbeat sent successfully")
                     else:
-                        print(f"💔 Heartbeat failed - Cloud may be unreachable")
+                        print(f"[ERROR] Heartbeat failed - Cloud may be unreachable")
                         self.registered = False
                 else:
                     # Try to register if not registered
                     if self.check_cloud_availability():
                         if self.register_with_cloud():
                             self.registered = True
-                            print(f"✅ Re-registered with Cloud Gateway")
+                            print(f"[SUCCESS] Re-registered with Cloud Gateway")
                 
                 time.sleep(30)  # Send heartbeat every 30 seconds
                 
             except Exception as e:
-                print(f"Heartbeat loop error: {e}")
+                print(f"[ERROR] Heartbeat loop error: {e}")
                 time.sleep(10)  # Wait before retrying
     
     def start(self):
         """Start the storage node"""
-        print(f"🚀 Starting Storage Node {self.node_id}...")
+        print(f"[START] Starting Storage Node {self.node_id}...")
         
         # Run boot sequence
         if not self.boot_sequence():
-            print(f"❌ Boot sequence failed for Node {self.node_id}")
+            print(f"[ERROR] Boot sequence failed for Node {self.node_id}")
             return
         
         # Start all components
@@ -424,7 +424,7 @@ class StorageNode:
         try:
             self.display_status()
         except KeyboardInterrupt:
-            print(f"\n🛑 Shutting down Node {self.node_id}...")
+            print(f"\n[STOP] Shutting down Node {self.node_id}...")
             self.running = False
 
 if __name__ == "__main__":
