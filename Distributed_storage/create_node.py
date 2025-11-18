@@ -31,7 +31,7 @@ class NodeCreator:
         
         # Check if node already exists
         if node_id in self.existing_nodes:
-            print(f"❌ Node {node_id} already exists!")
+            print(f"[ERROR] Node {node_id} already exists!")
             return False
         
         # Auto-assign port if not specified
@@ -61,8 +61,8 @@ class NodeCreator:
             shutil.rmtree(storage_dir)
         os.makedirs(storage_dir, exist_ok=True)
         
-        print(f"✅ Node {node_id} created successfully!")
-        print(f"📋 Configuration:")
+        print(f"[SUCCESS] Node {node_id} created successfully!")
+        print(f"[INFO] Configuration:")
         print(f"   Host: {host}:{port}")
         print(f"   Storage: {storage_gb} GB")
         print(f"   CPU Cores: {cpu_cores}")
@@ -73,7 +73,7 @@ class NodeCreator:
     
     def list_nodes(self):
         """List all created nodes"""
-        print("📋 Created Nodes:")
+        print("[INFO] Created Nodes:")
         print("=" * 60)
         
         if not self.existing_nodes:
@@ -81,7 +81,7 @@ class NodeCreator:
             return
         
         for node_id, config in self.existing_nodes.items():
-            print(f"🖥️  {node_id}")
+            print(f"[NODE] {node_id}")
             print(f"   Address: {config['host']}:{config['port']}")
             print(f"   Storage: {config['storage_capacity_gb']} GB")
             print(f"   CPU: {config['cpu_cores']} cores")
