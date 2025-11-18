@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 """
 Start Node Utility - Start a storage node
@@ -19,14 +20,14 @@ def main():
     # Check if node configuration exists
     config_file = 'nodes_config.json'
     if not os.path.exists(config_file):
-        print(f"❌ No node configurations found. Create a node first with create_node.py")
+        print(f"[ERROR] No node configurations found. Create a node first with create_node.py")
         sys.exit(1)
     
     with open(config_file, 'r') as f:
         nodes_config = json.load(f)
     
     if node_id not in nodes_config:
-        print(f"❌ Node {node_id} not found!")
+        print(f"[ERROR] Node {node_id} not found!")
         print("Available nodes:")
         for nid in nodes_config.keys():
             print(f"  - {nid}")
@@ -34,7 +35,7 @@ def main():
     
     node_config = nodes_config[node_id]
     
-    print(f"🚀 Starting Node {node_id}...")
+    print(f"[START] Starting Node {node_id}...")
     
     # Build command to start storage node
     cmd = [
@@ -49,9 +50,9 @@ def main():
         # Start the storage node process
         subprocess.run(cmd)
     except KeyboardInterrupt:
-        print(f"\n🛑 Node {node_id} stopped.")
+        print(f"\n[STOP] Node {node_id} stopped.")
     except Exception as e:
-        print(f"❌ Error starting node: {e}")
+        print(f"[ERROR] Error starting node: {e}")
 
 if __name__ == "__main__":
     main()
