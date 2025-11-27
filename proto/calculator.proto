@@ -1,0 +1,111 @@
+syntax = "proto3";
+
+package cloudgrpc;
+
+// Calculator Service
+service Calculator {
+  rpc Add (AddRequest) returns (AddResponse);
+  rpc Sub (SubRequest) returns (SubResponse);
+  rpc Mul (MulRequest) returns (MulResponse);
+  rpc Div (DivRequest) returns (DivResponse);
+  rpc Mod (ModRequest) returns (ModResponse);
+}
+
+// Authentication Service
+service AuthService {
+  rpc Login (LoginRequest) returns (LoginResponse);
+  rpc VerifyOtp (VerifyOtpRequest) returns (VerifyOtpResponse);
+  rpc Enroll (EnrollRequest) returns (EnrollResponse);
+}
+
+// Calculator Messages
+message AddRequest {
+  string session_token = 1;
+  int64 a = 2;
+  int64 b = 3;
+}
+
+message AddResponse {
+  bool success = 1;
+  string message = 2;
+  int64 result = 3;
+}
+
+message SubRequest {
+  string session_token = 1;
+  int64 a = 2;
+  int64 b = 3;
+}
+
+message SubResponse {
+  bool success = 1;
+  string message = 2;
+  int64 result = 3;
+}
+
+message MulRequest {
+  string session_token = 1;
+  int64 a = 2;
+  int64 b = 3;
+}
+
+message MulResponse {
+  bool success = 1;
+  string message = 2;
+  int64 result = 3;
+}
+
+message DivRequest {
+  string session_token = 1;
+  int64 a = 2;
+  int64 b = 3;
+}
+
+message DivResponse {
+  bool success = 1;
+  string message = 2;
+  int64 result = 3;
+}
+
+message ModRequest {
+  string session_token = 1;
+  int64 a = 2;
+  int64 b = 3;
+}
+
+message ModResponse {
+  bool success = 1;
+  string message = 2;
+  int64 result = 3;
+}
+
+// Auth Messages
+message LoginRequest {
+  string email = 1;
+}
+
+message LoginResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message VerifyOtpRequest {
+  string email = 1;
+  string otp = 2;
+}
+
+message VerifyOtpResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message EnrollRequest {
+  string email = 1;
+  string full_name = 2;
+}
+
+message EnrollResponse {
+  bool success = 1;
+  string message = 2;
+  string session_token = 3;
+}
