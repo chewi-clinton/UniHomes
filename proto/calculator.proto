@@ -17,6 +17,7 @@ service AuthService {
   rpc VerifyOtp (VerifyOtpRequest) returns (VerifyOtpResponse);
   rpc Login (LoginRequest) returns (LoginResponse);
   rpc Enroll (EnrollRequest) returns (EnrollResponse);
+  rpc GetStorageInfo (StorageInfoRequest) returns (StorageInfoResponse);
 }
 
 // Calculator Messages

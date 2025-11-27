@@ -70,6 +70,23 @@ class CloudGrpcClient:
             print(f"✗ Enrollment failed: [{e.code().name}] {e.details()}")
             return False
     
+    def get_storage_info(self):
+        """Get user's storage information"""
+        try:
+            response = self.auth_stub.GetStorageInfo(
+                calculator_pb2.StorageInfoRequest(session_token=self.session_token)
+            )
+            return {
+                'success': response.success,
+                'allocated': response.allocated_bytes,
+                'used': response.used_bytes,
+                'available': response.available_bytes,
+                'usage_percentage': response.usage_percentage
+            }
+        except grpc.RpcError as e:
+            print(f"✗ Failed to get storage info: [{e.code().name}] {e.details()}")
+            return None
+    
     def add(self, a, b):
         """Add two numbers"""
         try:
@@ -130,6 +147,36 @@ class CloudGrpcClient:
         self.channel.close()
 
 
+def format_bytes(bytes_value):
+    """Format bytes to human-readable format"""
+    for unit in ['B', 'KB', 'MB', 'GB']:
+        if bytes_value < 1024.0:
+            return f"{bytes_value:.2f} {unit}"
+        bytes_value /= 1024.0
+    return f"{bytes_value:.2f} TB"
+
+
+def display_storage_info(client):
+    """Display user's storage information"""
+    storage_info = client.get_storage_info()
+    
+    if storage_info:
+        print("\n" + "="*60)
+        print("STORAGE INFORMATION")
+        print("="*60)
+        print(f"Allocated:  {format_bytes(storage_info['allocated'])}")
+        print(f"Used:       {format_bytes(storage_info['used'])}")
+        print(f"Available:  {format_bytes(storage_info['available'])}")
+        print(f"Usage:      {storage_info['usage_percentage']:.2f}%")
+        
+        # Visual progress bar
+        bar_length = 40
+        filled_length = int(bar_length * storage_info['usage_percentage'] / 100)
+        bar = '█' * filled_length + '░' * (bar_length - filled_length)
+        print(f"[{bar}] {storage_info['usage_percentage']:.2f}%")
+        print("="*60)
+
+
 def calculator_menu(client):
     """Interactive calculator menu"""
     while True:
@@ -142,21 +189,26 @@ def calculator_menu(client):
         print("4. Division")
         print("5. Modulo")
         print("6. Run Concurrent Operations Demo")
-        print("7. Logout")
+        print("7. View Storage Information")
+        print("8. Logout")
         print("="*60)
         
-        choice = input("Select operation (1-7): ").strip()
+        choice = input("Select operation (1-8): ").strip()
         
-        if choice == '7':
+        if choice == '8':
             print("\n✓ Logged out successfully!")
             break
+        
+        if choice == '7':
+            display_storage_info(client)
+            continue
         
         if choice == '6':
             run_concurrent_demo(client)
             continue
         
         if choice not in ['1', '2', '3', '4', '5']:
-            print("✗ Invalid choice! Please select 1-7.")
+            print("✗ Invalid choice! Please select 1-8.")
             continue
         
         try:
@@ -277,6 +329,7 @@ def main():
             
             # Successfully logged in, go to calculator menu
             print(f"\n✓ Welcome back!")
+            display_storage_info(client)
             calculator_menu(client)
         
         elif choice == '2':
@@ -309,6 +362,7 @@ def main():
             
             # Successfully enrolled, go to calculator menu
             print(f"\n✓ Welcome, {full_name}!")
+            display_storage_info(client)
             calculator_menu(client)
         
         else:
