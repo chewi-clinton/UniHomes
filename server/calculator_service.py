@@ -18,12 +18,12 @@ user_manager = UserManager()
 class AuthServiceServicer(calculator_pb2_grpc.AuthServiceServicer):
     """Implementation of AuthService"""
     
-    def Login(self, request, context):
+    def SendOtp(self, request, context):
         """Send OTP to user's email"""
         email = request.email
         
         if not email or '@' not in email:
-            return calculator_pb2.LoginResponse(
+            return calculator_pb2.SendOtpResponse(
                 success=False,
                 message="Invalid email address."
             )
@@ -35,7 +35,7 @@ class AuthServiceServicer(calculator_pb2_grpc.AuthServiceServicer):
             # Mark email as verified (pending OTP confirmation)
             user_manager.mark_email_verified(email)
         
-        return calculator_pb2.LoginResponse(
+        return calculator_pb2.SendOtpResponse(
             success=success,
             message=message
         )
@@ -52,6 +52,36 @@ class AuthServiceServicer(calculator_pb2_grpc.AuthServiceServicer):
             message=message
         )
     
+    def Login(self, request, context):
+        """Login existing user and return session token"""
+        email = request.email
+        
+        # Check if user exists
+        if not user_manager.user_exists(email):
+            context.abort(
+                grpc.StatusCode.NOT_FOUND,
+                "User not found. Please enroll first."
+            )
+        
+        # Check if email is verified (OTP verified)
+        if not user_manager.is_email_verified(email):
+            context.abort(
+                grpc.StatusCode.UNAUTHENTICATED,
+                "Email not verified. Please complete OTP verification first."
+            )
+        
+        # Login user
+        success, message, token, user_name = user_manager.login_existing_user(email)
+        
+        if not success:
+            context.abort(grpc.StatusCode.UNAUTHENTICATED, message)
+        
+        return calculator_pb2.LoginResponse(
+            success=True,
+            message=message,
+            session_token=token
+        )
+    
     def Enroll(self, request, context):
         """Enroll a new user with storage allocation"""
         email = request.email
@@ -62,6 +92,13 @@ class AuthServiceServicer(calculator_pb2_grpc.AuthServiceServicer):
             context.abort(
                 grpc.StatusCode.UNAUTHENTICATED,
                 "Email not verified. Please complete login and OTP verification first."
+            )
+        
+        # Check if user already exists
+        if user_manager.user_exists(email):
+            context.abort(
+                grpc.StatusCode.ALREADY_EXISTS,
+                "User already enrolled. Please use Login option instead."
             )
         
         # Check if storage is available

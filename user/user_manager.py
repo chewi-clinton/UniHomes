@@ -37,6 +37,42 @@ class UserManager:
             return (self.global_used + PER_USER_ALLOCATION <= GLOBAL_STORAGE_BYTES and 
                     len(self.users) < MAX_USERS)
     
+    def login_existing_user(self, email):
+        """
+        Login an existing user and generate new session token
+        Returns: (success, message, token, user_name)
+        """
+        with self._lock:
+            # Check if email is verified
+            if email not in self.verified_emails:
+                return False, "Email not verified. Please complete OTP verification.", None, None
+            
+            # Check if OTP is still valid
+            if time.time() > self.verified_emails[email]:
+                del self.verified_emails[email]
+                return False, "OTP expired. Please request a new OTP.", None, None
+            
+            # Check if user exists
+            if email not in self.users:
+                return False, "User not enrolled. Please enroll first.", None, None
+            
+            # Generate new session token
+            token = secrets.token_urlsafe(32)
+            
+            # Update user's token
+            self.users[email]['token'] = token
+            user_name = self.users[email]['name']
+            
+            # Remove from verified emails (one-time use)
+            del self.verified_emails[email]
+            
+            return True, f"Successfully logged in as {user_name}.", token, user_name
+    
+    def user_exists(self, email):
+        """Check if user is already enrolled"""
+        with self._lock:
+            return email in self.users
+    
     def enroll_user(self, email, name):
         """
         Enroll a new user with storage allocation
@@ -54,7 +90,7 @@ class UserManager:
             
             # Check if user already exists
             if email in self.users:
-                return False, "User already enrolled.", None
+                return False, "User already enrolled. Please use Login option.", None
             
             # Check if we can allocate storage
             if not (self.global_used + PER_USER_ALLOCATION <= GLOBAL_STORAGE_BYTES):

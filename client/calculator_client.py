@@ -18,16 +18,16 @@ class CloudGrpcClient:
         self.session_token = None
         self.current_user = None
     
-    def login(self, email):
+    def send_otp(self, email):
         """Send OTP to email"""
         try:
-            response = self.auth_stub.Login(
-                calculator_pb2.LoginRequest(email=email)
+            response = self.auth_stub.SendOtp(
+                calculator_pb2.SendOtpRequest(email=email)
             )
             print(f"✓ {response.message}")
             return response.success
         except grpc.RpcError as e:
-            print(f"✗ Login failed: {e.details()}")
+            print(f"✗ Failed to send OTP: {e.details()}")
             return False
     
     def verify_otp(self, email, otp):
@@ -40,6 +40,19 @@ class CloudGrpcClient:
             return response.success
         except grpc.RpcError as e:
             print(f"✗ OTP verification failed: {e.details()}")
+            return False
+    
+    def login(self, email):
+        """Login existing user"""
+        try:
+            response = self.auth_stub.Login(
+                calculator_pb2.LoginRequest(email=email)
+            )
+            self.session_token = response.session_token
+            print(f"✓ {response.message}")
+            return True
+        except grpc.RpcError as e:
+            print(f"✗ Login failed: [{e.code().name}] {e.details()}")
             return False
     
     def enroll(self, email, full_name):
@@ -240,9 +253,9 @@ def main():
             sys.exit(0)
         
         if choice == '1':
-            # LOGIN FLOW
+            # LOGIN FLOW (Existing User)
             print("\n" + "-"*60)
-            print("LOGIN")
+            print("LOGIN - Existing User")
             print("-"*60)
             
             email = input("Enter your email: ").strip()
@@ -251,21 +264,25 @@ def main():
                 continue
             
             print(f"\n📧 Sending OTP to {email}...")
-            if not client.login(email):
+            if not client.send_otp(email):
                 continue
             
             otp = input("\nEnter the OTP sent to your email: ").strip()
             if not client.verify_otp(email, otp):
                 continue
             
-            print("\n✗ Login successful, but you need to enroll first!")
-            print("   Please select 'Enroll' option to complete registration.")
-            continue
+            print(f"\n🔐 Logging in...")
+            if not client.login(email):
+                continue
+            
+            # Successfully logged in, go to calculator menu
+            print(f"\n✓ Welcome back!")
+            calculator_menu(client)
         
         elif choice == '2':
-            # ENROLLMENT FLOW
+            # ENROLLMENT FLOW (New User)
             print("\n" + "-"*60)
-            print("ENROLLMENT")
+            print("ENROLLMENT - New User")
             print("-"*60)
             
             email = input("Enter your email: ").strip()
@@ -279,7 +296,7 @@ def main():
                 continue
             
             print(f"\n📧 Sending OTP to {email}...")
-            if not client.login(email):
+            if not client.send_otp(email):
                 continue
             
             otp = input("\nEnter the OTP sent to your email: ").strip()

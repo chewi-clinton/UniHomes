@@ -13,8 +13,9 @@ service Calculator {
 
 // Authentication Service
 service AuthService {
-  rpc Login (LoginRequest) returns (LoginResponse);
+  rpc SendOtp (SendOtpRequest) returns (SendOtpResponse);
   rpc VerifyOtp (VerifyOtpRequest) returns (VerifyOtpResponse);
+  rpc Login (LoginRequest) returns (LoginResponse);
   rpc Enroll (EnrollRequest) returns (EnrollResponse);
 }
 
@@ -80,11 +81,11 @@ message ModResponse {
 }
 
 // Auth Messages
-message LoginRequest {
+message SendOtpRequest {
   string email = 1;
 }
 
-message LoginResponse {
+message SendOtpResponse {
   bool success = 1;
   string message = 2;
 }
@@ -97,6 +98,16 @@ message VerifyOtpRequest {
 message VerifyOtpResponse {
   bool success = 1;
   string message = 2;
+}
+
+message LoginRequest {
+  string email = 1;
+}
+
+message LoginResponse {
+  bool success = 1;
+  string message = 2;
+  string session_token = 3;
 }
 
 message EnrollRequest {
