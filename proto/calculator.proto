@@ -20,6 +20,12 @@ service AuthService {
   rpc GetStorageInfo (StorageInfoRequest) returns (StorageInfoResponse);
 }
 
+service AdminService {
+  rpc GetSystemStatus (SystemStatusRequest) returns (SystemStatusResponse);
+  rpc UpdateGlobalStorage (UpdateStorageRequest) returns (UpdateStorageResponse);
+  rpc StreamSystemEvents (SystemEventsRequest) returns (stream SystemEvent);
+}
+
 // Calculator Messages
 message AddRequest {
   string session_token = 1;
@@ -120,4 +126,17 @@ message EnrollResponse {
   bool success = 1;
   string message = 2;
   string session_token = 3;
+}
+
+message StorageInfoRequest {
+  string session_token = 1;
+}
+
+message StorageInfoResponse {
+  bool success = 1;
+  string message = 2;
+  int64 allocated_bytes = 3;
+  int64 used_bytes = 4;
+  int64 available_bytes = 5;
+  double usage_percentage = 6;
 }
