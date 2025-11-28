@@ -1,9 +1,14 @@
 """
 Cloud Client - gRPC client for interacting with cloud storage
+VERIFIED VERSION - All methods return correct tuples
 """
 import grpc
 import os
+import sys
 from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from generated import cloud_storage_pb2
 from generated import cloud_storage_pb2_grpc
@@ -29,7 +34,10 @@ class CloudClient:
     # ============================================================================
     
     def send_otp(self, email):
-        """Send OTP to email"""
+        """
+        Send OTP to email
+        Returns: (success: bool, message: str)
+        """
         try:
             response = self.auth_stub.SendOTP(
                 cloud_storage_pb2.SendOTPRequest(email=email)
@@ -37,9 +45,14 @@ class CloudClient:
             return response.success, response.message
         except grpc.RpcError as e:
             return False, f"RPC Error: {e.details()}"
+        except Exception as e:
+            return False, f"Error: {str(e)}"
     
     def verify_otp(self, email, otp):
-        """Verify OTP"""
+        """
+        Verify OTP
+        Returns: (success: bool, message: str)
+        """
         try:
             response = self.auth_stub.VerifyOTP(
                 cloud_storage_pb2.VerifyOTPRequest(email=email, otp=otp)
@@ -47,9 +60,15 @@ class CloudClient:
             return response.success, response.message
         except grpc.RpcError as e:
             return False, f"RPC Error: {e.details()}"
+        except Exception as e:
+            return False, f"Error: {str(e)}"
     
     def enroll(self, email, full_name):
-        """Enroll new user"""
+        """
+        Enroll new user
+        Returns: (success: bool, message: str)
+        Sets self.session_token, self.user_id, self.email on success
+        """
         try:
             response = self.auth_stub.Enroll(
                 cloud_storage_pb2.EnrollRequest(email=email, full_name=full_name)
@@ -63,9 +82,15 @@ class CloudClient:
             return response.success, response.message
         except grpc.RpcError as e:
             return False, f"RPC Error: {e.details()}"
+        except Exception as e:
+            return False, f"Error: {str(e)}"
     
     def login(self, email):
-        """Login existing user"""
+        """
+        Login existing user
+        Returns: (success: bool, message: str)
+        Sets self.session_token, self.user_id, self.email on success
+        """
         try:
             response = self.auth_stub.Login(
                 cloud_storage_pb2.LoginRequest(email=email)
@@ -79,9 +104,14 @@ class CloudClient:
             return response.success, response.message
         except grpc.RpcError as e:
             return False, f"RPC Error: {e.details()}"
+        except Exception as e:
+            return False, f"Error: {str(e)}"
     
     def logout(self):
-        """Logout current user"""
+        """
+        Logout current user
+        Returns: (success: bool, message: str)
+        """
         if not self.session_token:
             return False, "Not logged in"
         
@@ -98,18 +128,23 @@ class CloudClient:
             return response.success, response.message
         except grpc.RpcError as e:
             return False, f"RPC Error: {e.details()}"
+        except Exception as e:
+            return False, f"Error: {str(e)}"
     
     # ============================================================================
     # File Operations
     # ============================================================================
     
     def upload_file(self, file_path, parent_folder_id=None):
-        """Upload a file to cloud storage"""
+        """
+        Upload a file to cloud storage
+        Returns: (success: bool, message: str, file_id: str)
+        """
         if not self.session_token:
             return False, "Not logged in", None
         
         if not os.path.exists(file_path):
-            return False, "File not found", None
+            return False, f"File not found: {file_path}", None
         
         try:
             # Read file
@@ -137,8 +172,8 @@ class CloudClient:
                     )
                 )
                 
-                # Subsequent messages: chunks
-                chunk_size = 64 * 1024  # 64KB chunks
+                # Subsequent messages: chunks (stream in 64KB chunks)
+                chunk_size = 64 * 1024  # 64KB chunks for network transfer
                 for i in range(0, file_size, chunk_size):
                     chunk = file_data[i:i + chunk_size]
                     yield cloud_storage_pb2.UploadFileRequest(chunk_data=chunk)
@@ -154,7 +189,10 @@ class CloudClient:
             return False, f"Error: {str(e)}", None
     
     def download_file(self, file_id, output_path=None):
-        """Download a file from cloud storage"""
+        """
+        Download a file from cloud storage
+        Returns: (success: bool, message: str)
+        """
         if not self.session_token:
             return False, "Not logged in"
         
@@ -196,11 +234,16 @@ class CloudClient:
         
         except grpc.RpcError as e:
             return False, f"RPC Error: {e.details()}"
+        except StopIteration:
+            return False, "Incomplete download"
         except Exception as e:
             return False, f"Error: {str(e)}"
     
     def list_files(self, folder_id=None, include_deleted=False):
-        """List files in cloud storage"""
+        """
+        List files in cloud storage
+        Returns: (success: bool, message: str, files: list, folders: list)
+        """
         if not self.session_token:
             return False, "Not logged in", [], []
         
@@ -238,9 +281,14 @@ class CloudClient:
         
         except grpc.RpcError as e:
             return False, f"RPC Error: {e.details()}", [], []
+        except Exception as e:
+            return False, f"Error: {str(e)}", [], []
     
     def delete_file(self, file_id, permanent=False):
-        """Delete a file"""
+        """
+        Delete a file
+        Returns: (success: bool, message: str)
+        """
         if not self.session_token:
             return False, "Not logged in"
         
@@ -257,9 +305,14 @@ class CloudClient:
         
         except grpc.RpcError as e:
             return False, f"RPC Error: {e.details()}"
+        except Exception as e:
+            return False, f"Error: {str(e)}"
     
     def get_file_metadata(self, file_id):
-        """Get file metadata"""
+        """
+        Get file metadata
+        Returns: (success: bool, message: str, file_info: dict)
+        """
         if not self.session_token:
             return False, "Not logged in", None
         
@@ -288,9 +341,14 @@ class CloudClient:
         
         except grpc.RpcError as e:
             return False, f"RPC Error: {e.details()}", None
+        except Exception as e:
+            return False, f"Error: {str(e)}", None
     
     def create_folder(self, folder_name, parent_folder_id=None):
-        """Create a folder"""
+        """
+        Create a folder
+        Returns: (success: bool, message: str, folder_id: str)
+        """
         if not self.session_token:
             return False, "Not logged in", None
         
@@ -307,9 +365,14 @@ class CloudClient:
         
         except grpc.RpcError as e:
             return False, f"RPC Error: {e.details()}", None
+        except Exception as e:
+            return False, f"Error: {str(e)}", None
     
     def share_file(self, file_id, share_with_email, permission='read'):
-        """Share a file with another user"""
+        """
+        Share a file with another user
+        Returns: (success: bool, message: str, share_token: str)
+        """
         if not self.session_token:
             return False, "Not logged in", None
         
@@ -327,9 +390,14 @@ class CloudClient:
         
         except grpc.RpcError as e:
             return False, f"RPC Error: {e.details()}", None
+        except Exception as e:
+            return False, f"Error: {str(e)}", None
     
     def get_shared_files(self):
-        """Get files shared with current user"""
+        """
+        Get files shared with current user
+        Returns: (success: bool, message: str, shared_files: list)
+        """
         if not self.session_token:
             return False, "Not logged in", []
         
@@ -354,13 +422,18 @@ class CloudClient:
         
         except grpc.RpcError as e:
             return False, f"RPC Error: {e.details()}", []
+        except Exception as e:
+            return False, f"Error: {str(e)}", []
     
     # ============================================================================
     # Storage Information
     # ============================================================================
     
     def get_storage_info(self):
-        """Get storage information for current user"""
+        """
+        Get storage information for current user
+        Returns: (success: bool, message: str, storage_info: dict)
+        """
         if not self.session_token:
             return False, "Not logged in", None
         
@@ -384,6 +457,8 @@ class CloudClient:
         
         except grpc.RpcError as e:
             return False, f"RPC Error: {e.details()}", None
+        except Exception as e:
+            return False, f"Error: {str(e)}", None
     
     # ============================================================================
     # Utility Methods
@@ -403,4 +478,7 @@ class CloudClient:
     
     def close(self):
         """Close the client connection"""
-        self.channel.close()
+        try:
+            self.channel.close()
+        except:
+            pass
