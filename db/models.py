@@ -139,5 +139,5 @@ class SystemEvent(Base):
     event_type = Column(String(50), nullable=False, index=True)
     message = Column(Text, nullable=False)
     user_id = Column(String(36), nullable=True)
-    metadata = Column(JSON, default=dict)
+    metadatas = Column(JSON, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)

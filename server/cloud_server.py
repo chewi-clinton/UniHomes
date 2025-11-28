@@ -13,8 +13,8 @@ from datetime import datetime
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from generated import cloud_storage_pb2
-from generated import cloud_storage_pb2_grpc
+import generated.cloud_storage_pb2 as cloud_storage_pb2
+import generated.cloud_storage_pb2_grpc as cloud_storage_pb2_grpc
 from auth.gmail_otp import OTPManager
 from user.user_manager import UserManager
 from file.file_manager import FileManager
@@ -60,7 +60,7 @@ def emit_event(event_type, message, user_id=None, details=None):
                 event_type=event_type,
                 message=message,
                 user_id=user_id,
-                metadata={'details': details} if details else {}
+                metadatass={'details': details} if details else {}
             )
             session.add(db_event)
         print(f"[EVENT] {event_type}: {message}")
@@ -162,18 +162,18 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
     def UploadFile(self, request_iterator, context):
         """Handle file upload with streaming"""
         try:
-            # First message contains metadata
+            # First message contains metadatass
             first_request = next(request_iterator)
             
-            if not first_request.HasField('metadata'):
-                context.abort(grpc.StatusCode.INVALID_ARGUMENT, "First message must contain metadata")
+            if not first_request.HasField('metadatas'):
+                context.abort(grpc.StatusCode.INVALID_ARGUMENT, "First message must contain metadatas")
             
-            metadata = first_request.metadata
-            session_token = metadata.session_token
-            filename = metadata.filename
-            file_size = metadata.file_size
-            mime_type = metadata.mime_type
-            parent_folder_id = metadata.parent_folder_id if metadata.parent_folder_id else None
+            metadatas = first_request.metadatas
+            session_token = metadatas.session_token
+            filename = metadatas.filename
+            file_size = metadatas.file_size
+            mime_type = metadatas.mime_type
+            parent_folder_id = metadatas.parent_folder_id if metadatas.parent_folder_id else None
             
             # Validate session
             user = user_manager.validate_session(session_token)
@@ -194,7 +194,7 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             
             print(f"[UPLOAD] Received {len(file_data)} bytes")
             
-            # Create file metadata
+            # Create file metadatas
             success, message, file_id = file_manager.create_file(
                 user.user_id,
                 filename,
@@ -232,7 +232,7 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
                 )
                 
                 if success:
-                    # Add chunk metadata
+                    # Add chunk metadatas
                     file_manager.add_chunk(
                         file_id,
                         i,
@@ -303,7 +303,7 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             if not user:
                 context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
             
-            # Get file metadata
+            # Get file metadatas
             file_info = file_manager.get_file(file_id, user.user_id)
             if not file_info:
                 context.abort(grpc.StatusCode.NOT_FOUND, "File not found")
@@ -472,8 +472,8 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
         except Exception as e:
             print(f"[ERROR] Failed to delete chunk: {e}")
     
-    def GetFileMetadata(self, request, context):
-        """Get file metadata"""
+    def GetFilemetadatas(self, request, context):
+        """Get file metadatas"""
         try:
             session_token = request.session_token
             file_id = request.file_id
@@ -489,7 +489,7 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             
             chunks = file_manager.get_file_chunks(file_id)
             
-            return cloud_storage_pb2.FileMetadataResponse(
+            return cloud_storage_pb2.FilemetadatasResponse(
                 success=True,
                 file=cloud_storage_pb2.FileEntry(
                     file_id=file_info['file_id'],
@@ -504,7 +504,7 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             )
         
         except Exception as e:
-            print(f"[ERROR] Get metadata failed: {e}")
+            print(f"[ERROR] Get metadatas failed: {e}")
             context.abort(grpc.StatusCode.INTERNAL, str(e))
     
     def CreateFolder(self, request, context):
