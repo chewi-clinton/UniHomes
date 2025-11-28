@@ -1,6 +1,5 @@
 import os
 import sys
-import re
 
 def generate_proto():
     """Generate Python code from proto file"""
@@ -35,38 +34,11 @@ def generate_proto():
         print("\n✓ Protobuf files generated successfully!")
         print("  - generated/calculator_pb2.py")
         print("  - generated/calculator_pb2_grpc.py")
-        
-        # Fix import in calculator_pb2_grpc.py
-        fix_grpc_imports()
     else:
         print("\n✗ Failed to generate protobuf files")
         print("Make sure grpcio-tools is installed:")
         print("  pip install grpcio-tools")
         sys.exit(1)
-
-def fix_grpc_imports():
-    """Fix the import statement in generated gRPC file"""
-    grpc_file = 'generated/calculator_pb2_grpc.py'
-    
-    if not os.path.exists(grpc_file):
-        return
-    
-    with open(grpc_file, 'r') as f:
-        content = f.read()
-    
-    # Replace: import calculator_pb2 as calculator__pb2
-    # With: from . import calculator_pb2 as calculator__pb2
-    content = re.sub(
-        r'^import calculator_pb2 as calculator__pb2',
-        'from . import calculator_pb2 as calculator__pb2',
-        content,
-        flags=re.MULTILINE
-    )
-    
-    with open(grpc_file, 'w') as f:
-        f.write(content)
-    
-    print("✓ Fixed imports in calculator_pb2_grpc.py")
 
 if __name__ == '__main__':
     generate_proto()

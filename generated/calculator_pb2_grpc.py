@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from . import calculator_pb2 as calculator__pb2
+import calculator_pb2 as calculator__pb2
 
 GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__
@@ -282,20 +282,30 @@ class AuthServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.Login = channel.unary_unary(
-                '/cloudgrpc.AuthService/Login',
-                request_serializer=calculator__pb2.LoginRequest.SerializeToString,
-                response_deserializer=calculator__pb2.LoginResponse.FromString,
+        self.SendOtp = channel.unary_unary(
+                '/cloudgrpc.AuthService/SendOtp',
+                request_serializer=calculator__pb2.SendOtpRequest.SerializeToString,
+                response_deserializer=calculator__pb2.SendOtpResponse.FromString,
                 _registered_method=True)
         self.VerifyOtp = channel.unary_unary(
                 '/cloudgrpc.AuthService/VerifyOtp',
                 request_serializer=calculator__pb2.VerifyOtpRequest.SerializeToString,
                 response_deserializer=calculator__pb2.VerifyOtpResponse.FromString,
                 _registered_method=True)
+        self.Login = channel.unary_unary(
+                '/cloudgrpc.AuthService/Login',
+                request_serializer=calculator__pb2.LoginRequest.SerializeToString,
+                response_deserializer=calculator__pb2.LoginResponse.FromString,
+                _registered_method=True)
         self.Enroll = channel.unary_unary(
                 '/cloudgrpc.AuthService/Enroll',
                 request_serializer=calculator__pb2.EnrollRequest.SerializeToString,
                 response_deserializer=calculator__pb2.EnrollResponse.FromString,
+                _registered_method=True)
+        self.GetStorageInfo = channel.unary_unary(
+                '/cloudgrpc.AuthService/GetStorageInfo',
+                request_serializer=calculator__pb2.StorageInfoRequest.SerializeToString,
+                response_deserializer=calculator__pb2.StorageInfoResponse.FromString,
                 _registered_method=True)
 
 
@@ -303,7 +313,7 @@ class AuthServiceServicer(object):
     """Authentication Service
     """
 
-    def Login(self, request, context):
+    def SendOtp(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -315,7 +325,19 @@ class AuthServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def Login(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def Enroll(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetStorageInfo(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -324,20 +346,30 @@ class AuthServiceServicer(object):
 
 def add_AuthServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'Login': grpc.unary_unary_rpc_method_handler(
-                    servicer.Login,
-                    request_deserializer=calculator__pb2.LoginRequest.FromString,
-                    response_serializer=calculator__pb2.LoginResponse.SerializeToString,
+            'SendOtp': grpc.unary_unary_rpc_method_handler(
+                    servicer.SendOtp,
+                    request_deserializer=calculator__pb2.SendOtpRequest.FromString,
+                    response_serializer=calculator__pb2.SendOtpResponse.SerializeToString,
             ),
             'VerifyOtp': grpc.unary_unary_rpc_method_handler(
                     servicer.VerifyOtp,
                     request_deserializer=calculator__pb2.VerifyOtpRequest.FromString,
                     response_serializer=calculator__pb2.VerifyOtpResponse.SerializeToString,
             ),
+            'Login': grpc.unary_unary_rpc_method_handler(
+                    servicer.Login,
+                    request_deserializer=calculator__pb2.LoginRequest.FromString,
+                    response_serializer=calculator__pb2.LoginResponse.SerializeToString,
+            ),
             'Enroll': grpc.unary_unary_rpc_method_handler(
                     servicer.Enroll,
                     request_deserializer=calculator__pb2.EnrollRequest.FromString,
                     response_serializer=calculator__pb2.EnrollResponse.SerializeToString,
+            ),
+            'GetStorageInfo': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetStorageInfo,
+                    request_deserializer=calculator__pb2.StorageInfoRequest.FromString,
+                    response_serializer=calculator__pb2.StorageInfoResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -352,7 +384,7 @@ class AuthService(object):
     """
 
     @staticmethod
-    def Login(request,
+    def SendOtp(request,
             target,
             options=(),
             channel_credentials=None,
@@ -365,9 +397,9 @@ class AuthService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/cloudgrpc.AuthService/Login',
-            calculator__pb2.LoginRequest.SerializeToString,
-            calculator__pb2.LoginResponse.FromString,
+            '/cloudgrpc.AuthService/SendOtp',
+            calculator__pb2.SendOtpRequest.SerializeToString,
+            calculator__pb2.SendOtpResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -406,6 +438,33 @@ class AuthService(object):
             _registered_method=True)
 
     @staticmethod
+    def Login(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cloudgrpc.AuthService/Login',
+            calculator__pb2.LoginRequest.SerializeToString,
+            calculator__pb2.LoginResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def Enroll(request,
             target,
             options=(),
@@ -422,6 +481,194 @@ class AuthService(object):
             '/cloudgrpc.AuthService/Enroll',
             calculator__pb2.EnrollRequest.SerializeToString,
             calculator__pb2.EnrollResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetStorageInfo(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cloudgrpc.AuthService/GetStorageInfo',
+            calculator__pb2.StorageInfoRequest.SerializeToString,
+            calculator__pb2.StorageInfoResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+
+class AdminServiceStub(object):
+    """Admin Service
+    """
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.GetSystemStatus = channel.unary_unary(
+                '/cloudgrpc.AdminService/GetSystemStatus',
+                request_serializer=calculator__pb2.SystemStatusRequest.SerializeToString,
+                response_deserializer=calculator__pb2.SystemStatusResponse.FromString,
+                _registered_method=True)
+        self.UpdateGlobalStorage = channel.unary_unary(
+                '/cloudgrpc.AdminService/UpdateGlobalStorage',
+                request_serializer=calculator__pb2.UpdateStorageRequest.SerializeToString,
+                response_deserializer=calculator__pb2.UpdateStorageResponse.FromString,
+                _registered_method=True)
+        self.StreamSystemEvents = channel.unary_stream(
+                '/cloudgrpc.AdminService/StreamSystemEvents',
+                request_serializer=calculator__pb2.SystemEventsRequest.SerializeToString,
+                response_deserializer=calculator__pb2.SystemEvent.FromString,
+                _registered_method=True)
+
+
+class AdminServiceServicer(object):
+    """Admin Service
+    """
+
+    def GetSystemStatus(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateGlobalStorage(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def StreamSystemEvents(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_AdminServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'GetSystemStatus': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetSystemStatus,
+                    request_deserializer=calculator__pb2.SystemStatusRequest.FromString,
+                    response_serializer=calculator__pb2.SystemStatusResponse.SerializeToString,
+            ),
+            'UpdateGlobalStorage': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateGlobalStorage,
+                    request_deserializer=calculator__pb2.UpdateStorageRequest.FromString,
+                    response_serializer=calculator__pb2.UpdateStorageResponse.SerializeToString,
+            ),
+            'StreamSystemEvents': grpc.unary_stream_rpc_method_handler(
+                    servicer.StreamSystemEvents,
+                    request_deserializer=calculator__pb2.SystemEventsRequest.FromString,
+                    response_serializer=calculator__pb2.SystemEvent.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'cloudgrpc.AdminService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('cloudgrpc.AdminService', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class AdminService(object):
+    """Admin Service
+    """
+
+    @staticmethod
+    def GetSystemStatus(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cloudgrpc.AdminService/GetSystemStatus',
+            calculator__pb2.SystemStatusRequest.SerializeToString,
+            calculator__pb2.SystemStatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateGlobalStorage(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cloudgrpc.AdminService/UpdateGlobalStorage',
+            calculator__pb2.UpdateStorageRequest.SerializeToString,
+            calculator__pb2.UpdateStorageResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def StreamSystemEvents(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/cloudgrpc.AdminService/StreamSystemEvents',
+            calculator__pb2.SystemEventsRequest.SerializeToString,
+            calculator__pb2.SystemEvent.FromString,
             options,
             channel_credentials,
             insecure,

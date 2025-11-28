@@ -20,6 +20,7 @@ service AuthService {
   rpc GetStorageInfo (StorageInfoRequest) returns (StorageInfoResponse);
 }
 
+// Admin Service
 service AdminService {
   rpc GetSystemStatus (SystemStatusRequest) returns (SystemStatusResponse);
   rpc UpdateGlobalStorage (UpdateStorageRequest) returns (UpdateStorageResponse);
@@ -139,4 +140,46 @@ message StorageInfoResponse {
   int64 used_bytes = 4;
   int64 available_bytes = 5;
   double usage_percentage = 6;
+}
+
+// Admin Messages
+message SystemStatusRequest {
+  string admin_key = 1;
+}
+
+message SystemStatusResponse {
+  bool success = 1;
+  string message = 2;
+  int64 global_capacity_bytes = 3;
+  int64 global_allocated_bytes = 4;
+  int64 global_available_bytes = 5;
+  int64 global_used_bytes = 6;
+  int32 total_users = 7;
+  int32 max_users = 8;
+  double allocation_percentage = 9;
+  double usage_percentage = 10;
+}
+
+message UpdateStorageRequest {
+  string admin_key = 1;
+  int64 new_capacity_gb = 2;
+}
+
+message UpdateStorageResponse {
+  bool success = 1;
+  string message = 2;
+  int64 old_capacity_bytes = 3;
+  int64 new_capacity_bytes = 4;
+}
+
+message SystemEventsRequest {
+  string admin_key = 1;
+}
+
+message SystemEvent {
+  string event_type = 1;  // USER_ENROLLED, USER_LOGIN, STORAGE_UPDATED, OPERATION_PERFORMED
+  string timestamp = 2;
+  string message = 3;
+  string user_email = 4;
+  int64 storage_change = 5;
 }
