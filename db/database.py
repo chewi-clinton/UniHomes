@@ -13,10 +13,17 @@ load_dotenv()
 
 class Database:
     def __init__(self):
-        self.db_url = os.getenv(
-            'DATABASE_URL',
-            'postgresql://postgres:postgres@localhost:5432/cloud_storage'
-        )
+        # Build database URL from individual components
+        db_host = os.getenv('DB_HOST', 'localhost')
+        db_port = os.getenv('DB_PORT', '5432')
+        db_name = os.getenv('DB_NAME', 'cloud_storage')
+        db_user = os.getenv('DB_USER', 'postgres')
+        db_password = os.getenv('DB_PASSWORD', 'postgres')
+        
+        # Construct the database URL
+        self.db_url = f'postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}'
+        
+        print(f"[DATABASE] Connecting to: postgresql://{db_user}:***@{db_host}:{db_port}/{db_name}")
         
         self.engine = create_engine(
             self.db_url,
