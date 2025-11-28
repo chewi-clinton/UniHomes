@@ -1,5 +1,6 @@
 """
 Cloud Server - Main gRPC server handling all services
+UPDATED: Dynamic storage that grows with nodes
 """
 import grpc
 from concurrent import futures
@@ -633,7 +634,7 @@ class NodeServiceServicer(cloud_storage_pb2_grpc.NodeServiceServicer):
     """Node Service Implementation (for nodes to communicate with gateway)"""
     
     def RegisterNode(self, request, context):
-        """Register storage node"""
+        """Register storage node - DYNAMICALLY increases global storage"""
         try:
             success, message = node_manager.register_node(
                 request.node_id,
@@ -643,7 +644,14 @@ class NodeServiceServicer(cloud_storage_pb2_grpc.NodeServiceServicer):
                 request.cpu_cores
             )
             
-            emit_event('NODE_REGISTERED', f'Node registered: {request.node_id}')
+            # Emit event with storage change info
+            stats = node_manager.get_storage_statistics()
+            if stats:
+                emit_event(
+                    'NODE_REGISTERED',
+                    f'Node registered: {request.node_id} | Global storage: {stats["global_capacity"] / (1024**3):.2f} GB',
+                    details=request.node_id
+                )
             
             return cloud_storage_pb2.RegisterNodeResponse(
                 success=success,
@@ -677,40 +685,35 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
     """Admin Service Implementation"""
     
     def GetSystemStatus(self, request, context):
-        """Get system status"""
+        """Get system status with DYNAMIC storage"""
         try:
             if request.admin_key != ADMIN_KEY:
                 context.abort(grpc.StatusCode.PERMISSION_DENIED, "Invalid admin key")
             
-            # Get statistics from database
+            # Get DYNAMIC storage statistics
+            stats = node_manager.get_storage_statistics()
+            
+            if not stats:
+                context.abort(grpc.StatusCode.INTERNAL, "Failed to get statistics")
+            
+            # Get file and chunk counts
             with get_db_session() as session:
-                from db.models import User, File, Chunk, StorageNode
+                from db.models import File, Chunk
                 
-                total_users = session.query(User).count()
                 total_files = session.query(File).filter_by(deleted_at=None).count()
                 total_chunks = session.query(Chunk).count()
-                
-                nodes = session.query(StorageNode).all()
-                total_nodes = len(nodes)
-                online_nodes = sum(1 for n in nodes if n.status == 'online')
-                
-                global_capacity = sum(n.storage_capacity for n in nodes)
-                global_used = sum(n.storage_used for n in nodes)
-                
-                users = session.query(User).all()
-                global_allocated = sum(u.storage_allocated for u in users)
             
             return cloud_storage_pb2.SystemStatusResponse(
                 success=True,
-                global_capacity_bytes=global_capacity,
-                global_allocated_bytes=global_allocated,
-                global_used_bytes=global_used,
-                total_users=total_users,
-                total_nodes=total_nodes,
-                online_nodes=online_nodes,
+                global_capacity_bytes=stats['global_capacity'],
+                global_allocated_bytes=stats['user_allocated'],
+                global_used_bytes=stats['global_used'],
+                total_users=len([]),  # Will be implemented
+                total_nodes=stats['total_nodes'],
+                online_nodes=stats['online_nodes'],
                 total_files=total_files,
                 total_chunks=total_chunks,
-                system_health=100.0
+                system_health=100.0 if stats['online_nodes'] > 0 else 0.0
             )
         
         except Exception as e:
@@ -740,11 +743,20 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
 def serve():
     """Start the cloud server"""
     print("=" * 70)
-    print("CLOUD STORAGE PLATFORM - SERVER")
+    print("CLOUD STORAGE PLATFORM - SERVER (DYNAMIC STORAGE)")
     print("=" * 70)
     
     # Initialize database
     init_database()
+    
+    # Display current storage capacity
+    stats = node_manager.get_storage_statistics()
+    if stats:
+        print(f"Current Global Storage: {stats['global_capacity'] / (1024**3):.2f} GB")
+        print(f"Online Nodes: {stats['online_nodes']}/{stats['total_nodes']}")
+    else:
+        print("Current Global Storage: 0 GB (no nodes registered)")
+    print("Storage will grow as nodes are added!")
     
     # Create gRPC server
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=50))
@@ -773,7 +785,8 @@ def serve():
     print(f"Server listening on port {port}")
     print(f"Admin Key: {ADMIN_KEY}")
     print("=" * 70)
-    print("\n[READY] Cloud server is ready to accept connections\n")
+    print("\n[READY] Cloud server is ready to accept connections")
+    print("[INFO] Global storage grows automatically as nodes register!\n")
     
     server.start()
     

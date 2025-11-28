@@ -1,0 +1,425 @@
+syntax = "proto3";
+
+package cloudstorage;
+
+// ============================================================================
+// Authentication Service
+// ============================================================================
+service AuthService {
+  rpc SendOTP (SendOTPRequest) returns (SendOTPResponse);
+  rpc VerifyOTP (VerifyOTPRequest) returns (VerifyOTPResponse);
+  rpc Login (LoginRequest) returns (LoginResponse);
+  rpc Enroll (EnrollRequest) returns (EnrollResponse);
+  rpc Logout (LogoutRequest) returns (LogoutResponse);
+}
+
+message SendOTPRequest {
+  string email = 1;
+}
+
+message SendOTPResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message VerifyOTPRequest {
+  string email = 1;
+  string otp = 2;
+}
+
+message VerifyOTPResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message LoginRequest {
+  string email = 1;
+}
+
+message LoginResponse {
+  bool success = 1;
+  string message = 2;
+  string session_token = 3;
+  string user_id = 4;
+}
+
+message EnrollRequest {
+  string email = 1;
+  string full_name = 2;
+}
+
+message EnrollResponse {
+  bool success = 1;
+  string message = 2;
+  string session_token = 3;
+  string user_id = 4;
+}
+
+message LogoutRequest {
+  string session_token = 1;
+}
+
+message LogoutResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ============================================================================
+// File Service
+// ============================================================================
+service FileService {
+  rpc UploadFile (stream UploadFileRequest) returns (UploadFileResponse);
+  rpc DownloadFile (DownloadFileRequest) returns (stream DownloadFileResponse);
+  rpc ListFiles (ListFilesRequest) returns (ListFilesResponse);
+  rpc DeleteFile (DeleteFileRequest) returns (DeleteFileResponse);
+  rpc GetFileMetadata (FileMetadataRequest) returns (FileMetadataResponse);
+  rpc CreateFolder (CreateFolderRequest) returns (CreateFolderResponse);
+  rpc ShareFile (ShareFileRequest) returns (ShareFileResponse);
+  rpc GetSharedFiles (GetSharedFilesRequest) returns (GetSharedFilesResponse);
+}
+
+message UploadFileRequest {
+  oneof data {
+    FileMetadata metadata = 1;
+    bytes chunk_data = 2;
+  }
+}
+
+message FileMetadata {
+  string session_token = 1;
+  string filename = 2;
+  int64 file_size = 3;
+  string mime_type = 4;
+  string parent_folder_id = 5;
+}
+
+message UploadFileResponse {
+  bool success = 1;
+  string message = 2;
+  string file_id = 3;
+  int32 chunks_stored = 4;
+}
+
+message DownloadFileRequest {
+  string session_token = 1;
+  string file_id = 2;
+}
+
+message DownloadFileResponse {
+  oneof data {
+    FileInfo file_info = 1;
+    bytes chunk_data = 2;
+  }
+}
+
+message FileInfo {
+  string filename = 1;
+  int64 file_size = 2;
+  string mime_type = 3;
+  int32 total_chunks = 4;
+}
+
+message ListFilesRequest {
+  string session_token = 1;
+  string folder_id = 2;
+  bool include_deleted = 3;
+}
+
+message ListFilesResponse {
+  bool success = 1;
+  repeated FileEntry files = 2;
+  repeated FolderEntry folders = 3;
+}
+
+message FileEntry {
+  string file_id = 1;
+  string filename = 2;
+  int64 file_size = 3;
+  string mime_type = 4;
+  string created_at = 5;
+  string modified_at = 6;
+  bool is_shared = 7;
+}
+
+message FolderEntry {
+  string folder_id = 1;
+  string folder_name = 2;
+  string created_at = 3;
+  int32 file_count = 4;
+}
+
+message DeleteFileRequest {
+  string session_token = 1;
+  string file_id = 2;
+  bool permanent = 3;
+}
+
+message DeleteFileResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message FileMetadataRequest {
+  string session_token = 1;
+  string file_id = 2;
+}
+
+message FileMetadataResponse {
+  bool success = 1;
+  FileEntry file = 2;
+  int32 chunk_count = 3;
+  string checksum = 4;
+}
+
+message CreateFolderRequest {
+  string session_token = 1;
+  string folder_name = 2;
+  string parent_folder_id = 3;
+}
+
+message CreateFolderResponse {
+  bool success = 1;
+  string message = 2;
+  string folder_id = 3;
+}
+
+message ShareFileRequest {
+  string session_token = 1;
+  string file_id = 2;
+  string share_with_email = 3;
+  string permission = 4; // "read" or "write"
+}
+
+message ShareFileResponse {
+  bool success = 1;
+  string message = 2;
+  string share_token = 3;
+}
+
+message GetSharedFilesRequest {
+  string session_token = 1;
+}
+
+message GetSharedFilesResponse {
+  bool success = 1;
+  repeated SharedFileEntry shared_files = 2;
+}
+
+message SharedFileEntry {
+  string file_id = 1;
+  string filename = 2;
+  string shared_by_email = 3;
+  string permission = 4;
+  string shared_at = 5;
+}
+
+// ============================================================================
+// Storage Service
+// ============================================================================
+service StorageService {
+  rpc GetStorageInfo (StorageInfoRequest) returns (StorageInfoResponse);
+  rpc GetStorageUsage (StorageUsageRequest) returns (StorageUsageResponse);
+}
+
+message StorageInfoRequest {
+  string session_token = 1;
+}
+
+message StorageInfoResponse {
+  bool success = 1;
+  int64 allocated_bytes = 2;
+  int64 used_bytes = 3;
+  int64 available_bytes = 4;
+  double usage_percentage = 5;
+}
+
+message StorageUsageRequest {
+  string session_token = 1;
+}
+
+message StorageUsageResponse {
+  bool success = 1;
+  map<string, int64> usage_by_type = 2; // mime_type -> bytes
+  int32 total_files = 3;
+  int32 total_folders = 4;
+}
+
+// ============================================================================
+// Node Service (Internal)
+// ============================================================================
+service NodeService {
+  rpc RegisterNode (RegisterNodeRequest) returns (RegisterNodeResponse);
+  rpc Heartbeat (HeartbeatRequest) returns (HeartbeatResponse);
+  rpc StoreChunk (StoreChunkRequest) returns (StoreChunkResponse);
+  rpc RetrieveChunk (RetrieveChunkRequest) returns (RetrieveChunkResponse);
+  rpc DeleteChunk (DeleteChunkRequest) returns (DeleteChunkResponse);
+  rpc ListChunks (ListChunksRequest) returns (ListChunksResponse);
+}
+
+message RegisterNodeRequest {
+  string node_id = 1;
+  string host = 2;
+  int32 port = 3;
+  int64 storage_capacity = 4;
+  int32 cpu_cores = 5;
+}
+
+message RegisterNodeResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message HeartbeatRequest {
+  string node_id = 1;
+  int64 storage_used = 2;
+  int32 chunk_count = 3;
+}
+
+message HeartbeatResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message StoreChunkRequest {
+  string chunk_id = 1;
+  bytes chunk_data = 2;
+  string checksum = 3;
+}
+
+message StoreChunkResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message RetrieveChunkRequest {
+  string chunk_id = 1;
+}
+
+message RetrieveChunkResponse {
+  bool success = 1;
+  bytes chunk_data = 2;
+  string message = 3;
+}
+
+message DeleteChunkRequest {
+  string chunk_id = 1;
+}
+
+message DeleteChunkResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ListChunksRequest {
+  string node_id = 1;
+}
+
+message ListChunksResponse {
+  repeated string chunk_ids = 1;
+  int32 total_chunks = 2;
+}
+
+// ============================================================================
+// Admin Service
+// ============================================================================
+service AdminService {
+  rpc GetSystemStatus (SystemStatusRequest) returns (SystemStatusResponse);
+  rpc UpdateGlobalStorage (UpdateStorageRequest) returns (UpdateStorageResponse);
+  rpc StreamSystemEvents (StreamEventsRequest) returns (stream SystemEvent);
+  rpc ListAllUsers (ListUsersRequest) returns (ListUsersResponse);
+  rpc ListAllNodes (ListNodesRequest) returns (ListNodesResponse);
+  rpc GetUserDetails (UserDetailsRequest) returns (UserDetailsResponse);
+}
+
+message SystemStatusRequest {
+  string admin_key = 1;
+}
+
+message SystemStatusResponse {
+  bool success = 1;
+  int64 global_capacity_bytes = 2;
+  int64 global_allocated_bytes = 3;
+  int64 global_used_bytes = 4;
+  int32 total_users = 5;
+  int32 total_nodes = 6;
+  int32 online_nodes = 7;
+  int64 total_files = 8;
+  int64 total_chunks = 9;
+  double system_health = 10;
+}
+
+message UpdateStorageRequest {
+  string admin_key = 1;
+  int64 new_capacity_gb = 2;
+}
+
+message UpdateStorageResponse {
+  bool success = 1;
+  string message = 2;
+  int64 old_capacity_bytes = 3;
+  int64 new_capacity_bytes = 4;
+}
+
+message StreamEventsRequest {
+  string admin_key = 1;
+}
+
+message SystemEvent {
+  string event_type = 1;
+  string timestamp = 2;
+  string message = 3;
+  string user_id = 4;
+  string details = 5;
+}
+
+message ListUsersRequest {
+  string admin_key = 1;
+}
+
+message ListUsersResponse {
+  bool success = 1;
+  repeated UserInfo users = 2;
+}
+
+message UserInfo {
+  string user_id = 1;
+  string email = 2;
+  string name = 3;
+  int64 storage_allocated = 4;
+  int64 storage_used = 5;
+  string created_at = 6;
+  string last_login = 7;
+  int32 file_count = 8;
+}
+
+message ListNodesRequest {
+  string admin_key = 1;
+}
+
+message ListNodesResponse {
+  bool success = 1;
+  repeated NodeInfo nodes = 2;
+}
+
+message NodeInfo {
+  string node_id = 1;
+  string host = 2;
+  int32 port = 3;
+  int64 storage_capacity = 4;
+  int64 storage_used = 5;
+  string status = 6;
+  string last_heartbeat = 7;
+  int32 chunk_count = 8;
+  double health_score = 9;
+}
+
+message UserDetailsRequest {
+  string admin_key = 1;
+  string user_id = 2;
+}
+
+message UserDetailsResponse {
+  bool success = 1;
+  UserInfo user = 2;
+  repeated FileEntry files = 3;
+}
