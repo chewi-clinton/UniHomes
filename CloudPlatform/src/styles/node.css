@@ -1,0 +1,356 @@
+/* --- Variables (from previous theme) --- */
+:root {
+  --bg-dark: #0b0f19;
+  --card-bg: #111827;
+  --input-bg: #1f2937;
+  --border-color: #374151;
+  --text-white: #ffffff;
+  --text-gray: #9ca3af;
+  --primary-blue: #2563eb;
+  --primary-hover: #1d4ed8;
+
+  /* Node-specific colors */
+  --green-status: #10b981; /* Online/Health OK */
+  --red-status: #ef4444; /* Offline/Health Low */
+  --yellow-status: #fbbf24; /* Warning */
+  --text-medium-gray: #6b7280;
+}
+
+/* --- General & Layout --- */
+.nodes-page {
+  padding: 30px;
+  background-color: var(--bg-dark);
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.page-title-group h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--text-white);
+}
+
+.page-title-group p {
+  color: var(--text-gray);
+  font-size: 0.9rem;
+  margin-top: 5px;
+}
+
+.add-node-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background-color: var(--primary-blue);
+  color: var(--text-white);
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.add-node-btn:hover {
+  background-color: var(--primary-hover);
+}
+
+/* --- Top Dashboard Cards --- */
+.top-cards-container {
+  display: grid;
+  grid-template-columns: 1.2fr 2fr; /* Overview slightly smaller than Growth */
+  gap: 20px;
+  margin-bottom: 40px;
+}
+
+.data-card {
+  background-color: var(--card-bg);
+  padding: 25px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.card-title {
+  color: var(--text-white);
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+/* --- Global Storage Overview Card --- */
+.overview-content {
+  display: flex;
+  gap: 20px;
+}
+
+.chart-section {
+  position: relative;
+  width: 150px;
+  height: 150px;
+}
+
+.donut-chart-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.chart-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--text-white);
+  line-height: 1.2;
+}
+
+.chart-label {
+  font-size: 0.8rem;
+  color: var(--text-gray);
+}
+
+/* Legend Styling (Simulated) */
+.legend {
+  margin-left: 30px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 5px 0;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.legend-text {
+  color: var(--text-gray);
+  font-size: 0.9rem;
+}
+
+.legend-value {
+  color: var(--text-white);
+  font-weight: 600;
+  margin-left: auto;
+}
+
+.dot-used {
+  background-color: #06b6d4;
+} /* Cyan for Used Storage */
+.dot-allocated {
+  background-color: var(--primary-blue);
+}
+.dot-free {
+  background-color: var(--text-medium-gray);
+}
+
+/* --- Storage Growth Card --- */
+.growth-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
+.growth-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-white);
+}
+
+.growth-change {
+  color: var(--green-status); /* Positive change */
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.growth-subtitle {
+  color: var(--text-gray);
+  font-size: 0.85rem;
+  margin-bottom: 25px;
+}
+
+.chart-placeholder {
+  height: 150px; /* Placeholder height for the line graph */
+  background-color: transparent;
+  border: 1px dashed var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-medium-gray);
+  font-size: 0.9rem;
+  border-radius: 8px;
+}
+
+/* --- Network Nodes Section --- */
+.nodes-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.nodes-search {
+  display: flex;
+  align-items: center;
+  width: 400px;
+  background-color: var(--input-bg);
+  border-radius: 8px;
+  padding: 8px 15px;
+  gap: 10px;
+  border: 1px solid var(--border-color);
+}
+
+.nodes-search input {
+  flex-grow: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-white);
+  font-size: 0.95rem;
+}
+
+.nodes-search input::placeholder {
+  color: var(--text-gray);
+}
+
+.view-toggle-btn {
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.view-toggle-btn.active {
+  background-color: var(--primary-blue);
+  border-color: var(--primary-blue);
+}
+
+.view-toggle-btn .icon {
+  color: var(--text-gray);
+  font-size: 1.2rem;
+}
+
+.view-toggle-btn.active .icon {
+  color: var(--text-white);
+}
+
+/* --- Node Status Cards Grid --- */
+.nodes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.node-card {
+  background-color: var(--card-bg);
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.node-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 15px;
+}
+
+.node-id {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text-white);
+}
+
+.node-ip {
+  font-size: 0.85rem;
+  color: var(--text-medium-gray);
+}
+
+.node-status {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.status-online {
+  background-color: rgba(16, 185, 129, 0.2); /* Green background */
+  color: var(--green-status);
+}
+
+.status-offline {
+  background-color: rgba(239, 68, 68, 0.2); /* Red background */
+  color: var(--red-status);
+}
+
+.status-warning {
+  background-color: rgba(251, 191, 36, 0.2); /* Yellow background */
+  color: var(--yellow-status);
+}
+
+.capacity-title {
+  color: var(--text-gray);
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+}
+
+.node-capacity-bar {
+  width: 100%;
+  background-color: var(--progress-bar-track);
+  border-radius: 6px;
+  height: 8px;
+  overflow: hidden;
+  margin-bottom: 15px;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 6px;
+}
+
+.bar-online {
+  background-color: var(--green-status);
+}
+.bar-offline {
+  background-color: var(--red-status);
+}
+.bar-warning {
+  background-color: var(--yellow-status);
+}
+
+.node-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+}
+
+.health-label,
+.last-seen-label {
+  color: var(--text-medium-gray);
+}
+
+.health-value,
+.last-seen-value {
+  color: var(--text-white);
+  font-weight: 600;
+  margin-top: 3px;
+}
