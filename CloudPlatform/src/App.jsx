@@ -1,10 +1,10 @@
 import "./App.css";
-import OtpVerification from "./pages/Otpverification";
+import Dashboard from "./pages/Dashboard";
 
 function App() {
   return (
     <>
-      <OtpVerification />
+      <Dashboard />
     </>
   );
 }

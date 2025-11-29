@@ -1,0 +1,419 @@
+/* --- Variables (from previous theme) --- */
+:root {
+  --bg-dark: #0b0f19;
+  --card-bg: #111827;
+  --input-bg: #1f2937;
+  --border-color: #374151;
+  --text-white: #ffffff;
+  --text-gray: #9ca3af;
+  --primary-blue: #2563eb;
+  --primary-hover: #1d4ed8;
+
+  /* Dashboard specific colors */
+  --sidebar-bg: #111827;
+  --main-bg: #0b0f19; /* Lighter than --bg-dark for contrast with main content */
+  --header-bg: #111827;
+  --search-bg: #1f2937;
+  --active-sidebar-item-bg: #2563eb; /* Primary blue for active state */
+  --active-sidebar-item-text: #ffffff;
+  --hover-sidebar-item-bg: rgba(37, 99, 235, 0.2); /* Light blue hover */
+  --hover-sidebar-item-text: #ffffff; /* Text stays white on hover */
+  --progress-bar-bg: #2563eb;
+  --progress-bar-track: #1f2937;
+  --file-row-hover-bg: #1f2937;
+  --icon-color: #9ca3af; /* Gray for general icons */
+  --upload-btn-bg: #2563eb;
+  --upload-btn-hover: #1d4ed8;
+  --notification-dot: #ef4444; /* Red for notification */
+}
+
+/* --- General Resets & Typography --- */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  color: var(--text-white); /* Default text color for most elements */
+}
+
+body {
+  background-color: var(--main-bg);
+}
+
+/* --- Layout Container --- */
+.dashboard-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr; /* Sidebar fixed width, main content flexible */
+  grid-template-rows: 70px 1fr; /* Header fixed height, content flexible */
+  height: 100vh;
+  overflow: hidden; /* Prevent scrolling on the main layout */
+}
+
+/* --- Sidebar --- */
+.sidebar {
+  grid-area: 1 / 1 / 3 / 2; /* Spans header and main content rows */
+  background-color: var(--sidebar-bg);
+  padding: 20px 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-color);
+  overflow-y: auto; /* Allow sidebar to scroll if content is too long */
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border-color); /* Separator */
+}
+
+.sidebar-logo {
+  height: 32px;
+  width: auto;
+}
+
+.sidebar-brand-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-white);
+}
+
+.sidebar-brand-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-gray);
+  margin-top: -4px;
+}
+
+.sidebar-nav {
+  flex-grow: 1; /* Allows nav to take up available space */
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 12px 20px;
+  margin: 4px 0;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+  color: var(--text-gray);
+  font-size: 0.9rem;
+}
+
+.nav-item:hover {
+  background-color: var(--hover-sidebar-item-bg);
+  color: var(--hover-sidebar-item-text);
+}
+
+.nav-item.active {
+  background-color: var(--active-sidebar-item-bg);
+  color: var(--active-sidebar-item-text);
+  font-weight: 600;
+  border-radius: 0 8px 8px 0; /* Rounded right edge */
+  margin-right: 15px; /* Visual offset */
+}
+
+.nav-item.active .nav-icon {
+  color: var(--active-sidebar-item-text); /* Ensure icon is white too */
+}
+
+.nav-icon {
+  font-size: 1.2rem;
+  color: var(--icon-color);
+}
+
+/* --- Storage Usage --- */
+.storage-info {
+  padding: 20px;
+  margin-top: 20px; /* Space from nav items */
+}
+
+.storage-title {
+  color: var(--text-white);
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.progress-bar-container {
+  width: 100%;
+  background-color: var(--progress-bar-track);
+  border-radius: 6px;
+  height: 8px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-bar {
+  height: 100%;
+  background-color: var(--progress-bar-bg);
+  width: 65%; /* Example width, dynamic based on usage */
+  border-radius: 6px;
+}
+
+.storage-text {
+  color: var(--text-gray);
+  font-size: 0.8rem;
+  margin-bottom: 20px;
+}
+
+.upgrade-btn {
+  display: block;
+  width: 100%;
+  padding: 10px 15px;
+  background-color: var(--primary-blue);
+  color: var(--text-white);
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.upgrade-btn:hover {
+  background-color: var(--primary-hover);
+}
+
+/* --- Sidebar Footer --- */
+.sidebar-footer {
+  margin-top: auto; /* Pushes footer to the bottom */
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+/* --- Header --- */
+.header {
+  grid-area: 1 / 2 / 2 / 3;
+  background-color: var(--header-bg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 30px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  width: 400px;
+  background-color: var(--search-bg);
+  border-radius: 8px;
+  padding: 8px 15px;
+  gap: 10px;
+  border: 1px solid var(--border-color);
+}
+
+.search-bar input {
+  flex-grow: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-white);
+  font-size: 0.95rem;
+}
+
+.search-bar input::placeholder {
+  color: var(--text-gray);
+}
+
+.search-icon {
+  color: var(--icon-color);
+  font-size: 1.1rem;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.upload-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background-color: var(--upload-btn-bg);
+  color: var(--text-white);
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.upload-btn:hover {
+  background-color: var(--upload-btn-hover);
+}
+
+.action-icon-wrapper {
+  position: relative;
+}
+
+.action-icon {
+  font-size: 1.4rem;
+  color: var(--icon-color);
+  cursor: pointer;
+}
+
+.notification-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  background-color: var(--notification-dot);
+  border-radius: 50%;
+}
+
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: var(--primary-blue); /* Placeholder if no image */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+/* --- Main Content --- */
+.main-content {
+  grid-area: 2 / 2 / 3 / 3;
+  background-color: var(--main-bg);
+  padding: 30px;
+  overflow-y: auto; /* Allow main content to scroll */
+}
+
+.breadcrumb {
+  color: var(--text-gray);
+  font-size: 0.85rem;
+  margin-bottom: 25px;
+}
+
+.breadcrumb span {
+  color: var(--text-white); /* Current item is brighter */
+  font-weight: 600;
+}
+
+.breadcrumb a {
+  color: var(--text-gray);
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.page-title {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--text-white);
+  margin-bottom: 25px;
+}
+
+.content-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.view-toggle {
+  display: flex;
+  gap: 10px;
+}
+
+.view-toggle-btn {
+  background-color: var(--card-bg); /* Darker background */
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.view-toggle-btn:hover {
+  background-color: var(--input-bg);
+}
+
+.view-toggle-btn.active {
+  background-color: var(--primary-blue);
+  border-color: var(--primary-blue);
+}
+
+.view-toggle-btn .icon {
+  color: var(--icon-color);
+  font-size: 1.2rem;
+}
+
+.view-toggle-btn.active .icon {
+  color: var(--text-white);
+}
+
+/* --- File List Table --- */
+.file-list {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.file-list th {
+  text-align: left;
+  padding: 15px 20px;
+  color: var(--text-gray);
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-color);
+  text-transform: uppercase;
+}
+
+.file-list td {
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.9rem;
+  color: var(--text-white);
+}
+
+.file-list tbody tr:hover {
+  background-color: var(--file-row-hover-bg);
+}
+
+.file-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.file-icon {
+  font-size: 1.3rem;
+  color: var(--text-gray); /* Default icon color */
+}
+
+/* Specific icon colors */
+.file-icon.folder {
+  color: #facc15;
+} /* Yellow for folder */
+.file-icon.document {
+  color: #3b82f6;
+} /* Blue for document */
+.file-icon.pdf {
+  color: #dc2626;
+} /* Red for PDF */
+.file-icon.image {
+  color: #a855f7;
+} /* Purple for image */
+
+.shared-icon {
+  color: var(--icon-color);
+  font-size: 1.1rem;
+}
