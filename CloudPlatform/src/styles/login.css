@@ -1,13 +1,11 @@
-/* Login.css */
-
 :root {
-  --bg-dark: #0b0f19; /* Main background */
-  --card-bg: #111827; /* Card background */
-  --input-bg: #1f2937; /* Input background */
-  --border-color: #374151; /* Subtle borders */
+  --bg-dark: #0b0f19;
+  --card-bg: #111827;
+  --input-bg: #1f2937;
+  --border-color: #374151;
   --text-white: #ffffff;
   --text-gray: #9ca3af;
-  --primary-blue: #2563eb; /* The blue button color */
+  --primary-blue: #2563eb;
   --primary-hover: #1d4ed8;
 }
 
@@ -29,7 +27,7 @@
   padding: 20px;
 }
 
-/* --- Brand Header (Logo + Title) --- */
+/* --- Brand Header/Logo --- */
 .brand-header {
   display: flex;
   align-items: center;
@@ -38,7 +36,8 @@
 }
 
 .brand-logo {
-  height: 32px; /* Adjust based on your logo aspect ratio */
+  /* Increased size for better visibility */
+  height: 48px;
   width: auto;
 }
 
