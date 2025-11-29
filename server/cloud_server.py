@@ -169,109 +169,126 @@ class AuthServiceServicer(cloud_storage_pb2_grpc.AuthServiceServicer):
 class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
     """File Service Implementation"""
     
+    def _get_user_from_session_token(self, session_token, db_session):
+        """Get user from session token within the provided database session"""
+        from db.models import Session as DBSession, User
+        # First get the session from the database
+        db_session_obj = db_session.query(DBSession).filter_by(session_token=session_token).first()
+        if not db_session_obj:
+            return None
+        
+        # Then get the user associated with this session
+        user = db_session.query(User).filter_by(user_id=db_session_obj.user_id).first()
+        return user
+    
     def UploadFile(self, request_iterator, context):
         """Handle file upload with streaming"""
         try:
-            # First message contains metadatass
+            # First message contains metadata
             first_request = next(request_iterator)
             
-            if not first_request.HasField('metadatas'):
-                context.abort(grpc.StatusCode.INVALID_ARGUMENT, "First message must contain metadatas")
+            if not first_request.HasField('metadata'):
+                context.abort(grpc.StatusCode.INVALID_ARGUMENT, "First message must contain metadata")
             
-            metadatas = first_request.metadatas
-            session_token = metadatas.session_token
-            filename = metadatas.filename
-            file_size = metadatas.file_size
-            mime_type = metadatas.mime_type
-            parent_folder_id = metadatas.parent_folder_id if metadatas.parent_folder_id else None
+            metadata = first_request.metadata
+            session_token = metadata.session_token
+            filename = metadata.filename
+            file_size = metadata.file_size
+            mime_type = metadata.mime_type
+            parent_folder_id = metadata.parent_folder_id if metadata.parent_folder_id else None
             
-            # Validate session
-            user = user_manager.validate_session(session_token)
-            if not user:
-                context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
-            
-            # Check storage quota
-            if not user_manager.check_storage_available(user.user_id, file_size):
-                context.abort(grpc.StatusCode.RESOURCE_EXHAUSTED, "Storage quota exceeded")
-            
-            print(f"[UPLOAD] Starting: {filename} ({file_size} bytes) for user {user.email}")
-            
-            # Receive file data
-            file_data = b''
-            for request in request_iterator:
-                if request.HasField('chunk_data'):
-                    file_data += request.chunk_data
-            
-            print(f"[UPLOAD] Received {len(file_data)} bytes")
-            
-            # Create file metadatas
-            success, message, file_id = file_manager.create_file(
-                user.user_id,
-                filename,
-                file_size,
-                mime_type,
-                parent_folder_id
-            )
-            
-            if not success:
-                context.abort(grpc.StatusCode.INTERNAL, message)
-            
-            # Split into chunks
-            chunks = split_file_into_chunks(file_data, num_chunks=4)
-            print(f"[UPLOAD] Split into {len(chunks)} chunks")
-            
-            # Select nodes for chunks
-            node_mapping, error = chunk_distributor.select_nodes_for_chunks(len(chunks), replication_factor=1)
-            if error:
-                context.abort(grpc.StatusCode.UNAVAILABLE, error)
-            
-            # Store chunks on nodes
-            chunks_stored = 0
-            for i, chunk_data in enumerate(chunks):
-                chunk_checksum = calculate_checksum(chunk_data)
-                node_info = node_mapping[i]
+            # Create a new database session for the entire operation
+            with get_db_session() as db_session:
+                # Get user from session token within this session
+                user = self._get_user_from_session_token(session_token, db_session)
+                if not user:
+                    context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
                 
-                # Store chunk on primary node
-                success = self._store_chunk_on_node(
-                    node_info['primary_host'],
-                    node_info['primary_port'],
-                    file_id,
-                    i,
-                    chunk_data,
-                    chunk_checksum
+                user_id = user.user_id
+                user_email = user.email
+                
+                # Check storage quota
+                if not user_manager.check_storage_available(user_id, file_size):
+                    context.abort(grpc.StatusCode.RESOURCE_EXHAUSTED, "Storage quota exceeded")
+                
+                print(f"[UPLOAD] Starting: {filename} ({file_size} bytes) for user {user_email}")
+                
+                # Receive file data
+                file_data = b''
+                for request in request_iterator:
+                    if request.HasField('chunk_data'):
+                        file_data += request.chunk_data
+                
+                print(f"[UPLOAD] Received {len(file_data)} bytes")
+                
+                # Create file metadata
+                success, message, file_id = file_manager.create_file(
+                    user_id,
+                    filename,
+                    file_size,
+                    mime_type,
+                    parent_folder_id
                 )
                 
-                if success:
-                    # Add chunk metadatas
-                    file_manager.add_chunk(
+                if not success:
+                    context.abort(grpc.StatusCode.INTERNAL, message)
+                
+                # Split into chunks
+                chunks = split_file_into_chunks(file_data, num_chunks=4)
+                print(f"[UPLOAD] Split into {len(chunks)} chunks")
+                
+                # Select nodes for chunks
+                node_mapping, error = chunk_distributor.select_nodes_for_chunks(len(chunks), replication_factor=1)
+                if error:
+                    context.abort(grpc.StatusCode.UNAVAILABLE, error)
+                
+                # Store chunks on nodes
+                chunks_stored = 0
+                for i, chunk_data in enumerate(chunks):
+                    chunk_checksum = calculate_checksum(chunk_data)
+                    node_info = node_mapping[i]
+                    
+                    # Store chunk on primary node
+                    success = self._store_chunk_on_node(
+                        node_info['primary_host'],
+                        node_info['primary_port'],
                         file_id,
                         i,
-                        len(chunk_data),
-                        chunk_checksum,
-                        node_info['primary'],
-                        node_info['replicas']
+                        chunk_data,
+                        chunk_checksum
                     )
-                    chunks_stored += 1
-                    print(f"[UPLOAD] Chunk {i+1}/{len(chunks)} stored on {node_info['primary']}")
-                else:
-                    print(f"[ERROR] Failed to store chunk {i}")
-            
-            # Update user storage
-            user_manager.update_storage_usage(user.user_id, file_size)
-            
-            emit_event(
-                'FILE_UPLOADED',
-                f'File uploaded: {filename} ({file_size} bytes)',
-                user_id=user.user_id,
-                details=file_id
-            )
-            
-            return cloud_storage_pb2.UploadFileResponse(
-                success=True,
-                message="File uploaded successfully",
-                file_id=file_id,
-                chunks_stored=chunks_stored
-            )
+                    
+                    if success:
+                        # Add chunk metadata
+                        file_manager.add_chunk(
+                            file_id,
+                            i,
+                            len(chunk_data),
+                            chunk_checksum,
+                            node_info['primary'],
+                            node_info['replicas']
+                        )
+                        chunks_stored += 1
+                        print(f"[UPLOAD] Chunk {i+1}/{len(chunks)} stored on {node_info['primary']}")
+                    else:
+                        print(f"[ERROR] Failed to store chunk {i}")
+                
+                # Update user storage
+                user_manager.update_storage_usage(user_id, file_size)
+                
+                emit_event(
+                    'FILE_UPLOADED',
+                    f'File uploaded: {filename} ({file_size} bytes)',
+                    user_id=user_id,
+                    details=file_id
+                )
+                
+                return cloud_storage_pb2.UploadFileResponse(
+                    success=True,
+                    message="File uploaded successfully",
+                    file_id=file_id,
+                    chunks_stored=chunks_stored
+                )
         
         except StopIteration:
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, "No data received")
@@ -308,50 +325,55 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             session_token = request.session_token
             file_id = request.file_id
             
-            # Validate session
-            user = user_manager.validate_session(session_token)
-            if not user:
-                context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
-            
-            # Get file metadatas
-            file_info = file_manager.get_file(file_id, user.user_id)
-            if not file_info:
-                context.abort(grpc.StatusCode.NOT_FOUND, "File not found")
-            
-            print(f"[DOWNLOAD] Starting: {file_info['filename']} for user {user.email}")
-            
-            # Get chunks
-            chunks = file_manager.get_file_chunks(file_id)
-            
-            # Send file info first
-            yield cloud_storage_pb2.DownloadFileResponse(
-                file_info=cloud_storage_pb2.FileInfo(
-                    filename=file_info['filename'],
-                    file_size=file_info['file_size'],
-                    mime_type=file_info['mime_type'],
-                    total_chunks=len(chunks)
-                )
-            )
-            
-            # Stream chunks
-            for chunk_info in chunks:
-                chunk_data = self._retrieve_chunk_from_node(chunk_info)
+            # Create a new database session for the entire operation
+            with get_db_session() as db_session:
+                # Get user from session token within this session
+                user = self._get_user_from_session_token(session_token, db_session)
+                if not user:
+                    context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
                 
-                if chunk_data:
-                    yield cloud_storage_pb2.DownloadFileResponse(
-                        chunk_data=chunk_data
+                user_id = user.user_id
+                user_email = user.email
+                
+                # Get file metadata
+                file_info = file_manager.get_file(file_id, user_id)
+                if not file_info:
+                    context.abort(grpc.StatusCode.NOT_FOUND, "File not found")
+                
+                print(f"[DOWNLOAD] Starting: {file_info['filename']} for user {user_email}")
+                
+                # Get chunks
+                chunks = file_manager.get_file_chunks(file_id)
+                
+                # Send file info first
+                yield cloud_storage_pb2.DownloadFileResponse(
+                    file_info=cloud_storage_pb2.FileInfo(
+                        filename=file_info['filename'],
+                        file_size=file_info['file_size'],
+                        mime_type=file_info['mime_type'],
+                        total_chunks=len(chunks)
                     )
-                else:
-                    context.abort(grpc.StatusCode.DATA_LOSS, f"Failed to retrieve chunk {chunk_info['chunk_index']}")
-            
-            emit_event(
-                'FILE_DOWNLOADED',
-                f'File downloaded: {file_info["filename"]}',
-                user_id=user.user_id,
-                details=file_id
-            )
-            
-            print(f"[DOWNLOAD] Complete: {file_info['filename']}")
+                )
+                
+                # Stream chunks
+                for chunk_info in chunks:
+                    chunk_data = self._retrieve_chunk_from_node(chunk_info)
+                    
+                    if chunk_data:
+                        yield cloud_storage_pb2.DownloadFileResponse(
+                            chunk_data=chunk_data
+                        )
+                    else:
+                        context.abort(grpc.StatusCode.DATA_LOSS, f"Failed to retrieve chunk {chunk_info['chunk_index']}")
+                
+                emit_event(
+                    'FILE_DOWNLOADED',
+                    f'File downloaded: {file_info["filename"]}',
+                    user_id=user_id,
+                    details=file_id
+                )
+                
+                print(f"[DOWNLOAD] Complete: {file_info['filename']}")
         
         except Exception as e:
             print(f"[ERROR] Download failed: {e}")
@@ -390,40 +412,44 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             folder_id = request.folder_id if request.folder_id else None
             include_deleted = request.include_deleted
             
-            # Validate session
-            user = user_manager.validate_session(session_token)
-            if not user:
-                context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
-            
-            success, files, folders = file_manager.list_files(user.user_id, folder_id, include_deleted)
-            
-            # Convert to protobuf
-            file_entries = []
-            for file in files:
-                file_entries.append(cloud_storage_pb2.FileEntry(
-                    file_id=file['file_id'],
-                    filename=file['filename'],
-                    file_size=file['file_size'],
-                    mime_type=file['mime_type'],
-                    created_at=file['created_at'],
-                    modified_at=file['modified_at'],
-                    is_shared=file['is_shared']
-                ))
-            
-            folder_entries = []
-            for folder in folders:
-                folder_entries.append(cloud_storage_pb2.FolderEntry(
-                    folder_id=folder['folder_id'],
-                    folder_name=folder['folder_name'],
-                    created_at=folder['created_at'],
-                    file_count=folder['file_count']
-                ))
-            
-            return cloud_storage_pb2.ListFilesResponse(
-                success=True,
-                files=file_entries,
-                folders=folder_entries
-            )
+            # Create a new database session for the entire operation
+            with get_db_session() as db_session:
+                # Get user from session token within this session
+                user = self._get_user_from_session_token(session_token, db_session)
+                if not user:
+                    context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
+                
+                user_id = user.user_id
+                
+                success, files, folders = file_manager.list_files(user_id, folder_id, include_deleted)
+                
+                # Convert to protobuf
+                file_entries = []
+                for file in files:
+                    file_entries.append(cloud_storage_pb2.FileEntry(
+                        file_id=file['file_id'],
+                        filename=file['filename'],
+                        file_size=file['file_size'],
+                        mime_type=file['mime_type'],
+                        created_at=file['created_at'],
+                        modified_at=file['modified_at'],
+                        is_shared=file['is_shared']
+                    ))
+                
+                folder_entries = []
+                for folder in folders:
+                    folder_entries.append(cloud_storage_pb2.FolderEntry(
+                        folder_id=folder['folder_id'],
+                        folder_name=folder['folder_name'],
+                        created_at=folder['created_at'],
+                        file_count=folder['file_count']
+                    ))
+                
+                return cloud_storage_pb2.ListFilesResponse(
+                    success=True,
+                    files=file_entries,
+                    folders=folder_entries
+                )
         
         except Exception as e:
             print(f"[ERROR] List files failed: {e}")
@@ -436,31 +462,35 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             file_id = request.file_id
             permanent = request.permanent
             
-            # Validate session
-            user = user_manager.validate_session(session_token)
-            if not user:
-                context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
-            
-            success, message, chunk_ids = file_manager.delete_file(file_id, user.user_id, permanent)
-            
-            if not success:
-                context.abort(grpc.StatusCode.NOT_FOUND, message)
-            
-            # If permanent delete, remove chunks from nodes
-            if permanent and chunk_ids:
-                for chunk_id in chunk_ids:
-                    self._delete_chunk_from_nodes(chunk_id)
-            
-            emit_event(
-                'FILE_DELETED',
-                f'File deleted: {file_id} (permanent={permanent})',
-                user_id=user.user_id
-            )
-            
-            return cloud_storage_pb2.DeleteFileResponse(
-                success=True,
-                message=message
-            )
+            # Create a new database session for the entire operation
+            with get_db_session() as db_session:
+                # Get user from session token within this session
+                user = self._get_user_from_session_token(session_token, db_session)
+                if not user:
+                    context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
+                
+                user_id = user.user_id
+                
+                success, message, chunk_ids = file_manager.delete_file(file_id, user_id, permanent)
+                
+                if not success:
+                    context.abort(grpc.StatusCode.NOT_FOUND, message)
+                
+                # If permanent delete, remove chunks from nodes
+                if permanent and chunk_ids:
+                    for chunk_id in chunk_ids:
+                        self._delete_chunk_from_nodes(chunk_id)
+                
+                emit_event(
+                    'FILE_DELETED',
+                    f'File deleted: {file_id} (permanent={permanent})',
+                    user_id=user_id
+                )
+                
+                return cloud_storage_pb2.DeleteFileResponse(
+                    success=True,
+                    message=message
+                )
         
         except Exception as e:
             print(f"[ERROR] Delete file failed: {e}")
@@ -483,38 +513,42 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             print(f"[ERROR] Failed to delete chunk: {e}")
     
     def GetFilemetadatas(self, request, context):
-        """Get file metadatas"""
+        """Get file metadata"""
         try:
             session_token = request.session_token
             file_id = request.file_id
             
-            # Validate session
-            user = user_manager.validate_session(session_token)
-            if not user:
-                context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
-            
-            file_info = file_manager.get_file(file_id, user.user_id)
-            if not file_info:
-                context.abort(grpc.StatusCode.NOT_FOUND, "File not found")
-            
-            chunks = file_manager.get_file_chunks(file_id)
-            
-            return cloud_storage_pb2.FilemetadatasResponse(
-                success=True,
-                file=cloud_storage_pb2.FileEntry(
-                    file_id=file_info['file_id'],
-                    filename=file_info['filename'],
-                    file_size=file_info['file_size'],
-                    mime_type=file_info['mime_type'],
-                    created_at=file_info['created_at'],
-                    modified_at=file_info['modified_at'],
-                    is_shared=file_info['is_shared']
-                ),
-                chunk_count=len(chunks)
-            )
+            # Create a new database session for the entire operation
+            with get_db_session() as db_session:
+                # Get user from session token within this session
+                user = self._get_user_from_session_token(session_token, db_session)
+                if not user:
+                    context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
+                
+                user_id = user.user_id
+                
+                file_info = file_manager.get_file(file_id, user_id)
+                if not file_info:
+                    context.abort(grpc.StatusCode.NOT_FOUND, "File not found")
+                
+                chunks = file_manager.get_file_chunks(file_id)
+                
+                return cloud_storage_pb2.FilemetadatasResponse(
+                    success=True,
+                    file=cloud_storage_pb2.FileEntry(
+                        file_id=file_info['file_id'],
+                        filename=file_info['filename'],
+                        file_size=file_info['file_size'],
+                        mime_type=file_info['mime_type'],
+                        created_at=file_info['created_at'],
+                        modified_at=file_info['modified_at'],
+                        is_shared=file_info['is_shared']
+                    ),
+                    chunk_count=len(chunks)
+                )
         
         except Exception as e:
-            print(f"[ERROR] Get metadatas failed: {e}")
+            print(f"[ERROR] Get metadata failed: {e}")
             context.abort(grpc.StatusCode.INTERNAL, str(e))
     
     def CreateFolder(self, request, context):
@@ -524,21 +558,25 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             folder_name = request.folder_name
             parent_folder_id = request.parent_folder_id if request.parent_folder_id else None
             
-            # Validate session
-            user = user_manager.validate_session(session_token)
-            if not user:
-                context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
-            
-            success, message, folder_id = file_manager.create_folder(user.user_id, folder_name, parent_folder_id)
-            
-            if not success:
-                context.abort(grpc.StatusCode.INTERNAL, message)
-            
-            return cloud_storage_pb2.CreateFolderResponse(
-                success=True,
-                message=message,
-                folder_id=folder_id
-            )
+            # Create a new database session for the entire operation
+            with get_db_session() as db_session:
+                # Get user from session token within this session
+                user = self._get_user_from_session_token(session_token, db_session)
+                if not user:
+                    context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
+                
+                user_id = user.user_id
+                
+                success, message, folder_id = file_manager.create_folder(user_id, folder_name, parent_folder_id)
+                
+                if not success:
+                    context.abort(grpc.StatusCode.INTERNAL, message)
+                
+                return cloud_storage_pb2.CreateFolderResponse(
+                    success=True,
+                    message=message,
+                    folder_id=folder_id
+                )
         
         except Exception as e:
             print(f"[ERROR] Create folder failed: {e}")
@@ -552,23 +590,27 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             share_with_email = request.share_with_email
             permission = request.permission
             
-            # Validate session
-            user = user_manager.validate_session(session_token)
-            if not user:
-                context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
-            
-            success, message, share_token = file_manager.share_file(
-                file_id, user.user_id, share_with_email, permission
-            )
-            
-            if not success:
-                context.abort(grpc.StatusCode.NOT_FOUND, message)
-            
-            return cloud_storage_pb2.ShareFileResponse(
-                success=True,
-                message=message,
-                share_token=share_token
-            )
+            # Create a new database session for the entire operation
+            with get_db_session() as db_session:
+                # Get user from session token within this session
+                user = self._get_user_from_session_token(session_token, db_session)
+                if not user:
+                    context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
+                
+                user_id = user.user_id
+                
+                success, message, share_token = file_manager.share_file(
+                    file_id, user_id, share_with_email, permission
+                )
+                
+                if not success:
+                    context.abort(grpc.StatusCode.NOT_FOUND, message)
+                
+                return cloud_storage_pb2.ShareFileResponse(
+                    success=True,
+                    message=message,
+                    share_token=share_token
+                )
         
         except Exception as e:
             print(f"[ERROR] Share file failed: {e}")
@@ -579,32 +621,35 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
         try:
             session_token = request.session_token
             
-            # Validate session
-            user = user_manager.validate_session(session_token)
-            if not user:
-                context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
-            
-            success, shared_files = file_manager.get_shared_files(user.user_id)
-            
-            entries = []
-            for file in shared_files:
-                entries.append(cloud_storage_pb2.SharedFileEntry(
-                    file_id=file['file_id'],
-                    filename=file['filename'],
-                    shared_by_email=file['shared_by_email'],
-                    permission=file['permission'],
-                    shared_at=file['shared_at']
-                ))
-            
-            return cloud_storage_pb2.GetSharedFilesResponse(
-                success=True,
-                shared_files=entries
-            )
+            # Create a new database session for the entire operation
+            with get_db_session() as db_session:
+                # Get user from session token within this session
+                user = self._get_user_from_session_token(session_token, db_session)
+                if not user:
+                    context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
+                
+                user_id = user.user_id
+                
+                success, shared_files = file_manager.get_shared_files(user_id)
+                
+                entries = []
+                for file in shared_files:
+                    entries.append(cloud_storage_pb2.SharedFileEntry(
+                        file_id=file['file_id'],
+                        filename=file['filename'],
+                        shared_by_email=file['shared_by_email'],
+                        permission=file['permission'],
+                        shared_at=file['shared_at']
+                    ))
+                
+                return cloud_storage_pb2.GetSharedFilesResponse(
+                    success=True,
+                    shared_files=entries
+                )
         
         except Exception as e:
             print(f"[ERROR] Get shared files failed: {e}")
             context.abort(grpc.StatusCode.INTERNAL, str(e))
-
 
 class StorageServiceServicer(cloud_storage_pb2_grpc.StorageServiceServicer):
     """Storage Service Implementation"""
