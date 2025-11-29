@@ -1,10 +1,10 @@
 import "./App.css";
-import Login from "./pages/login";
+import OtpVerification from "./pages/Otpverification";
 
 function App() {
   return (
     <>
-      <Login />
+      <OtpVerification />
     </>
   );
 }
