@@ -654,22 +654,43 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
 class StorageServiceServicer(cloud_storage_pb2_grpc.StorageServiceServicer):
     """Storage Service Implementation"""
     
+    def _get_user_from_session_token(self, session_token, db_session):
+        """Get user from session token within the provided database session"""
+        from db.models import Session as DBSession, User
+        # First get the session from the database
+        db_session_obj = db_session.query(DBSession).filter_by(session_token=session_token).first()
+        if not db_session_obj:
+            return None
+        
+        # Then get the user associated with this session
+        user = db_session.query(User).filter_by(user_id=db_session_obj.user_id).first()
+        return user
+    
     def GetStorageInfo(self, request, context):
         """Get storage information"""
         try:
             session_token = request.session_token
             
-            storage_info = user_manager.get_storage_info(session_token)
-            if not storage_info:
-                context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
-            
-            return cloud_storage_pb2.StorageInfoResponse(
-                success=True,
-                allocated_bytes=storage_info['allocated'],
-                used_bytes=storage_info['used'],
-                available_bytes=storage_info['available'],
-                usage_percentage=storage_info['usage_percentage']
-            )
+            # Create a new database session for the entire operation
+            with get_db_session() as db_session:
+                # Get user from session token within this session
+                user = self._get_user_from_session_token(session_token, db_session)
+                if not user:
+                    context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
+                
+                # Calculate storage info directly from the user object
+                allocated = user.storage_allocated
+                used = user.storage_used
+                available = max(0, allocated - used)
+                usage_percentage = (used / allocated * 100) if allocated > 0 else 0
+                
+                return cloud_storage_pb2.StorageInfoResponse(
+                    success=True,
+                    allocated_bytes=allocated,
+                    used_bytes=used,
+                    available_bytes=available,
+                    usage_percentage=usage_percentage
+                )
         
         except Exception as e:
             print(f"[ERROR] Get storage info failed: {e}")
@@ -677,14 +698,26 @@ class StorageServiceServicer(cloud_storage_pb2_grpc.StorageServiceServicer):
     
     def GetStorageUsage(self, request, context):
         """Get detailed storage usage"""
-        # Implementation for future enhancement
-        return cloud_storage_pb2.StorageUsageResponse(
-            success=True,
-            total_files=0,
-            total_folders=0
-        )
-
-
+        try:
+            session_token = request.session_token
+            
+            # Create a new database session for the entire operation
+            with get_db_session() as db_session:
+                # Get user from session token within this session
+                user = self._get_user_from_session_token(session_token, db_session)
+                if not user:
+                    context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
+                
+                # Implementation for future enhancement
+                return cloud_storage_pb2.StorageUsageResponse(
+                    success=True,
+                    total_files=0,
+                    total_folders=0
+                )
+        
+        except Exception as e:
+            print(f"[ERROR] Get storage usage failed: {e}")
+            context.abort(grpc.StatusCode.INTERNAL, str(e))
 class NodeServiceServicer(cloud_storage_pb2_grpc.NodeServiceServicer):
     """Node Service Implementation (for nodes to communicate with gateway)"""
     
