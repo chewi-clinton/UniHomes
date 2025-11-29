@@ -1,0 +1,117 @@
+:root {
+  --bg-dark: #0b0f19;
+  --card-bg: #111827;
+  --input-bg: #1f2937;
+  --border-color: #374151;
+  --text-white: #ffffff;
+  --text-gray: #9ca3af;
+  --primary-blue: #2563eb;
+  --primary-hover: #1d4ed8;
+  --notification-dot: #ef4444;
+}
+
+/* --- Main Application Header --- */
+.app-header {
+  height: 70px;
+  background-color: var(--card-bg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 30px;
+  border-bottom: 1px solid var(--border-color);
+  width: 100%;
+  flex-shrink: 0; /* Prevents header from shrinking in layout */
+}
+
+/* --- Brand Header/Logo --- */
+.header-brand-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-logo {
+  height: 32px;
+  width: auto;
+}
+
+.header-brand-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-white);
+}
+
+/* --- Search Bar --- */
+.header-search-bar {
+  display: flex;
+  align-items: center;
+  width: 400px;
+  background-color: var(--input-bg);
+  border-radius: 8px;
+  padding: 8px 15px;
+  gap: 10px;
+  border: 1px solid var(--border-color);
+}
+
+.header-search-bar input {
+  flex-grow: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-white);
+  font-size: 0.95rem;
+}
+
+.header-search-bar input::placeholder {
+  color: var(--text-gray);
+}
+
+.header-search-icon {
+  color: var(--text-gray);
+  font-size: 1.1rem;
+}
+
+/* --- Actions/Profile --- */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.action-icon-wrapper {
+  position: relative;
+}
+
+.action-icon {
+  font-size: 1.4rem;
+  color: var(--text-gray);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.action-icon:hover {
+  color: var(--text-white);
+}
+
+.notification-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  background-color: var(--notification-dot);
+  border-radius: 50%;
+}
+
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: var(--primary-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
