@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CLI - Command Line Interface for Cloud Storage
+CLI - Command Line Interface for Cloud Storage (SIMPLIFIED)
 """
 import sys
 import os
@@ -49,74 +49,99 @@ class CloudCLI:
         print(f"ℹ {message}")
     
     # ============================================================================
-    # Authentication Commands
+    # SIMPLIFIED Authentication Commands
     # ============================================================================
     
-    def cmd_send_otp(self, email):
-        """Send OTP to email"""
-        self.print_header("Send OTP")
-        
-        if not email:
-            self.print_error("Email required")
-            print("Usage: cli.py send-otp <email>")
-            return False
-        
-        success, message = self.client.send_otp(email)
-        
-        if success:
-            self.print_success(message)
-        else:
-            self.print_error(message)
-        
-        return success
-    
-    def cmd_verify_otp(self, email, otp):
-        """Verify OTP"""
-        self.print_header("Verify OTP")
-        
-        if not email or not otp:
-            self.print_error("Email and OTP required")
-            print("Usage: cli.py verify-otp <email> <otp>")
-            return False
-        
-        success, message = self.client.verify_otp(email, otp)
-        
-        if success:
-            self.print_success(message)
-        else:
-            self.print_error(message)
-        
-        return success
-    
     def cmd_enroll(self, email, full_name):
-        """Enroll new user"""
+        """SIMPLIFIED: Enroll new user with automatic OTP"""
         self.print_header("Enroll New User")
         
         if not email or not full_name:
             self.print_error("Email and full name required")
-            print("Usage: cli.py enroll <email> <full_name>")
+            print("Usage: enroll <email> <full_name>")
             return False
         
+        # Step 1: Send OTP automatically
+        print(f"📧 Sending OTP to {email}...")
+        success, message = self.client.send_otp(email)
+        
+        if not success:
+            self.print_error(f"Failed to send OTP: {message}")
+            return False
+        
+        self.print_success("OTP sent to your email!")
+        
+        # Step 2: Ask user to enter OTP
+        print("\n" + "-" * 70)
+        otp = input("📬 Enter the 6-digit OTP code from your email: ").strip()
+        
+        if not otp:
+            self.print_error("OTP is required")
+            return False
+        
+        # Step 3: Verify OTP
+        print("🔐 Verifying OTP...")
+        success, message = self.client.verify_otp(email, otp)
+        
+        if not success:
+            self.print_error(f"OTP verification failed: {message}")
+            return False
+        
+        self.print_success("OTP verified!")
+        
+        # Step 4: Enroll user
+        print("📝 Creating your account...")
         success, message = self.client.enroll(email, full_name)
         
         if success:
             self.print_success(message)
             self.print_info(f"Logged in as: {self.client.email}")
             self.print_info(f"User ID: {self.client.user_id}")
+            self.print_info("You have 1 GB storage allocated")
         else:
             self.print_error(message)
         
         return success
     
     def cmd_login(self, email):
-        """Login existing user"""
+        """SIMPLIFIED: Login existing user with automatic OTP"""
         self.print_header("Login")
         
         if not email:
             self.print_error("Email required")
-            print("Usage: cli.py login <email>")
+            print("Usage: login <email>")
             return False
         
+        # Step 1: Send OTP automatically
+        print(f"📧 Sending OTP to {email}...")
+        success, message = self.client.send_otp(email)
+        
+        if not success:
+            self.print_error(f"Failed to send OTP: {message}")
+            return False
+        
+        self.print_success("OTP sent to your email!")
+        
+        # Step 2: Ask user to enter OTP
+        print("\n" + "-" * 70)
+        otp = input("📬 Enter the 6-digit OTP code from your email: ").strip()
+        
+        if not otp:
+            self.print_error("OTP is required")
+            return False
+        
+        # Step 3: Verify OTP
+        print("🔐 Verifying OTP...")
+        success, message = self.client.verify_otp(email, otp)
+        
+        if not success:
+            self.print_error(f"OTP verification failed: {message}")
+            return False
+        
+        self.print_success("OTP verified!")
+        
+        # Step 4: Login
+        print("🔓 Logging you in...")
         success, message = self.client.login(email)
         
         if success:
@@ -146,7 +171,7 @@ class CloudCLI:
         return success
     
     # ============================================================================
-    # File Commands
+    # File Commands (Same as before)
     # ============================================================================
     
     def cmd_upload(self, file_path):
@@ -159,7 +184,7 @@ class CloudCLI:
         
         if not file_path:
             self.print_error("File path required")
-            print("Usage: cli.py upload <file_path>")
+            print("Usage: upload <file_path>")
             return False
         
         if not os.path.exists(file_path):
@@ -189,7 +214,7 @@ class CloudCLI:
         
         if not file_id:
             self.print_error("File ID required")
-            print("Usage: cli.py download <file_id> [output_path]")
+            print("Usage: download <file_id> [output_path]")
             return False
         
         self.print_info(f"Downloading file: {file_id}")
@@ -229,13 +254,12 @@ class CloudCLI:
         # Print files
         if files:
             print("\n📄 FILES:")
-            print(f"{'Filename':<30} {'Size':<12} {'Type':<20} {'Created':<20}")
+            print(f"{'Filename':<30} {'Size':<12} {'Type':<20}")
             print("-" * 70)
             for file in files:
                 size = self.format_bytes(file['file_size'])
-                created = file['created_at'][:19].replace('T', ' ')
                 shared = " 🔗" if file['is_shared'] else ""
-                print(f"{file['filename']:<30} {size:<12} {file['mime_type']:<20} {created:<20}{shared}")
+                print(f"{file['filename']:<30} {size:<12} {file['mime_type']:<20}{shared}")
                 print(f"  ID: {file['file_id']}")
         
         if not folders and not files:
@@ -253,11 +277,8 @@ class CloudCLI:
         
         if not file_id:
             self.print_error("File ID required")
-            print("Usage: cli.py delete <file_id> [--permanent]")
+            print("Usage: delete <file_id> [--permanent]")
             return False
-        
-        action = "permanently deleting" if permanent else "moving to trash"
-        self.print_info(f"Action: {action} file {file_id}")
         
         success, message = self.client.delete_file(file_id, permanent)
         
@@ -267,114 +288,6 @@ class CloudCLI:
             self.print_error(message)
         
         return success
-    
-    def cmd_info(self, file_id):
-        """Get file information"""
-        self.print_header("File Information")
-        
-        if not self.client.is_logged_in():
-            self.print_error("Not logged in. Please login first.")
-            return False
-        
-        if not file_id:
-            self.print_error("File ID required")
-            print("Usage: cli.py info <file_id>")
-            return False
-        
-        success, message, file_info = self.client.get_file_metadata(file_id)
-        
-        if not success:
-            self.print_error(message)
-            return False
-        
-        print(f"\nFilename:      {file_info['filename']}")
-        print(f"File ID:       {file_info['file_id']}")
-        print(f"Size:          {self.format_bytes(file_info['file_size'])}")
-        print(f"MIME Type:     {file_info['mime_type']}")
-        print(f"Chunks:        {file_info['chunk_count']}")
-        print(f"Created:       {file_info['created_at'][:19].replace('T', ' ')}")
-        print(f"Modified:      {file_info['modified_at'][:19].replace('T', ' ')}")
-        print(f"Shared:        {'Yes' if file_info['is_shared'] else 'No'}")
-        
-        return True
-    
-    def cmd_mkdir(self, folder_name):
-        """Create a folder"""
-        self.print_header("Create Folder")
-        
-        if not self.client.is_logged_in():
-            self.print_error("Not logged in. Please login first.")
-            return False
-        
-        if not folder_name:
-            self.print_error("Folder name required")
-            print("Usage: cli.py mkdir <folder_name>")
-            return False
-        
-        success, message, folder_id = self.client.create_folder(folder_name, self.current_folder_id)
-        
-        if success:
-            self.print_success(message)
-            self.print_info(f"Folder ID: {folder_id}")
-        else:
-            self.print_error(message)
-        
-        return success
-    
-    def cmd_share(self, file_id, share_with_email, permission='read'):
-        """Share a file"""
-        self.print_header("Share File")
-        
-        if not self.client.is_logged_in():
-            self.print_error("Not logged in. Please login first.")
-            return False
-        
-        if not file_id or not share_with_email:
-            self.print_error("File ID and email required")
-            print("Usage: cli.py share <file_id> <email> [permission]")
-            return False
-        
-        success, message, share_token = self.client.share_file(file_id, share_with_email, permission)
-        
-        if success:
-            self.print_success(message)
-            self.print_info(f"Share token: {share_token}")
-        else:
-            self.print_error(message)
-        
-        return success
-    
-    def cmd_shared(self):
-        """List files shared with current user"""
-        self.print_header("Shared Files")
-        
-        if not self.client.is_logged_in():
-            self.print_error("Not logged in. Please login first.")
-            return False
-        
-        success, message, shared_files = self.client.get_shared_files()
-        
-        if not success:
-            self.print_error(message)
-            return False
-        
-        if not shared_files:
-            self.print_info("No files shared with you")
-            return True
-        
-        print(f"\n{'Filename':<30} {'Shared By':<30} {'Permission':<12} {'Date':<20}")
-        print("-" * 70)
-        
-        for file in shared_files:
-            shared_at = file['shared_at'][:19].replace('T', ' ')
-            print(f"{file['filename']:<30} {file['shared_by_email']:<30} {file['permission']:<12} {shared_at:<20}")
-            print(f"  ID: {file['file_id']}")
-        
-        return True
-    
-    # ============================================================================
-    # Storage Commands
-    # ============================================================================
     
     def cmd_storage(self):
         """Show storage information"""
@@ -436,12 +349,6 @@ class CloudCLI:
                 elif cmd == 'help':
                     self.show_help()
                 
-                elif cmd == 'send-otp':
-                    self.cmd_send_otp(args[0] if args else None)
-                
-                elif cmd == 'verify-otp':
-                    self.cmd_verify_otp(args[0] if args else None, args[1] if len(args) > 1 else None)
-                
                 elif cmd == 'enroll':
                     email = args[0] if args else None
                     name = ' '.join(args[1:]) if len(args) > 1 else None
@@ -469,21 +376,6 @@ class CloudCLI:
                     permanent = '--permanent' in args
                     self.cmd_delete(file_id, permanent)
                 
-                elif cmd == 'info':
-                    self.cmd_info(args[0] if args else None)
-                
-                elif cmd == 'mkdir':
-                    self.cmd_mkdir(' '.join(args) if args else None)
-                
-                elif cmd == 'share':
-                    file_id = args[0] if args else None
-                    email = args[1] if len(args) > 1 else None
-                    permission = args[2] if len(args) > 2 else 'read'
-                    self.cmd_share(file_id, email, permission)
-                
-                elif cmd == 'shared':
-                    self.cmd_shared()
-                
                 elif cmd == 'storage':
                     self.cmd_storage()
                 
@@ -508,32 +400,22 @@ class CloudCLI:
         print("AVAILABLE COMMANDS")
         print("=" * 70)
         
-        print("\n📧 AUTHENTICATION:")
-        print("  send-otp <email>              Send OTP to email")
-        print("  verify-otp <email> <otp>      Verify OTP code")
-        print("  enroll <email> <name>         Enroll new user")
-        print("  login <email>                 Login existing user")
+        print("\n📧 AUTHENTICATION (SIMPLIFIED):")
+        print("  enroll <email> <name>         Register new account (auto-sends OTP)")
+        print("  login <email>                 Login to existing account (auto-sends OTP)")
         print("  logout                        Logout current user")
         
         print("\n📁 FILE OPERATIONS:")
         print("  upload <file_path>            Upload a file")
         print("  download <file_id> [output]   Download a file")
         print("  list (or ls)                  List files")
-        print("  delete <file_id> [--permanent] Delete a file")
-        print("  info <file_id>                Get file information")
-        print("  mkdir <folder_name>           Create a folder")
-        
-        print("\n🔗 SHARING:")
-        print("  share <file_id> <email> [perm] Share a file (perm: read/write)")
-        print("  shared                         List files shared with you")
-        
-        print("\n💾 STORAGE:")
-        print("  storage                        Show storage information")
+        print("  delete <file_id>              Delete a file")
+        print("  storage                       Show storage information")
         
         print("\n🔧 UTILITY:")
-        print("  help                           Show this help message")
-        print("  clear                          Clear screen")
-        print("  exit (or quit)                 Exit the CLI")
+        print("  help                          Show this help message")
+        print("  clear                         Clear screen")
+        print("  exit (or quit)                Exit the CLI")
         print("=" * 70)
 
 
@@ -544,7 +426,6 @@ def main():
     parser = argparse.ArgumentParser(description='Cloud Storage CLI')
     parser.add_argument('command', nargs='?', help='Command to execute')
     parser.add_argument('args', nargs='*', help='Command arguments')
-    parser.add_argument('--permanent', action='store_true', help='Permanent delete flag')
     
     args = parser.parse_args()
     
@@ -560,16 +441,7 @@ def main():
     cmd_args = args.args
     
     try:
-        if cmd == 'send-otp':
-            success = cli.cmd_send_otp(cmd_args[0] if cmd_args else None)
-        
-        elif cmd == 'verify-otp':
-            success = cli.cmd_verify_otp(
-                cmd_args[0] if cmd_args else None,
-                cmd_args[1] if len(cmd_args) > 1 else None
-            )
-        
-        elif cmd == 'enroll':
+        if cmd == 'enroll':
             email = cmd_args[0] if cmd_args else None
             name = ' '.join(cmd_args[1:]) if len(cmd_args) > 1 else None
             success = cli.cmd_enroll(email, name)
@@ -592,22 +464,7 @@ def main():
             success = cli.cmd_list()
         
         elif cmd == 'delete' or cmd == 'rm':
-            success = cli.cmd_delete(cmd_args[0] if cmd_args else None, args.permanent)
-        
-        elif cmd == 'info':
-            success = cli.cmd_info(cmd_args[0] if cmd_args else None)
-        
-        elif cmd == 'mkdir':
-            success = cli.cmd_mkdir(' '.join(cmd_args) if cmd_args else None)
-        
-        elif cmd == 'share':
-            file_id = cmd_args[0] if cmd_args else None
-            email = cmd_args[1] if len(cmd_args) > 1 else None
-            permission = cmd_args[2] if len(cmd_args) > 2 else 'read'
-            success = cli.cmd_share(file_id, email, permission)
-        
-        elif cmd == 'shared':
-            success = cli.cmd_shared()
+            success = cli.cmd_delete(cmd_args[0] if cmd_args else None)
         
         elif cmd == 'storage':
             success = cli.cmd_storage()

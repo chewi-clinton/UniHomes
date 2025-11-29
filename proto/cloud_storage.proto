@@ -187,7 +187,7 @@ message ShareFileRequest {
   string session_token = 1;
   string file_id = 2;
   string share_with_email = 3;
-  string permission = 4; // "read" or "write"
+  string permission = 4;
 }
 
 message ShareFileResponse {
@@ -239,7 +239,7 @@ message StorageUsageRequest {
 
 message StorageUsageResponse {
   bool success = 1;
-  map<string, int64> usage_by_type = 2; // mime_type -> bytes
+  map<string, int64> usage_by_type = 2;
   int32 total_files = 3;
   int32 total_folders = 4;
 }

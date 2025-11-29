@@ -8,7 +8,7 @@ import sys
 import os
 import queue
 import threading
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -42,11 +42,21 @@ node_manager = NodeManager()
 event_queue = queue.Queue()
 
 
+def get_utcnow():
+    """Get current UTC datetime in a cross-version compatible way"""
+    if sys.version_info >= (3, 11):
+        return datetime.now(timezone.utc)
+    else:
+        return datetime.utcnow()
+
+
 def emit_event(event_type, message, user_id=None, details=None):
     """Emit system event"""
+    timestamp = get_utcnow().isoformat()
+    
     event = cloud_storage_pb2.SystemEvent(
         event_type=event_type,
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=timestamp,
         message=message,
         user_id=user_id or "",
         details=details or ""
@@ -60,7 +70,7 @@ def emit_event(event_type, message, user_id=None, details=None):
                 event_type=event_type,
                 message=message,
                 user_id=user_id,
-                metadatass={'details': details} if details else {}
+                metadatas={'details': details} if details else {}
             )
             session.add(db_event)
         print(f"[EVENT] {event_type}: {message}")
@@ -682,7 +692,7 @@ class NodeServiceServicer(cloud_storage_pb2_grpc.NodeServiceServicer):
 
 
 class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
-    """Admin Service Implementation"""
+    """Admin Service Implementation - FULLY FUNCTIONAL"""
     
     def GetSystemStatus(self, request, context):
         """Get system status with DYNAMIC storage"""
@@ -698,17 +708,18 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
             
             # Get file and chunk counts
             with get_db_session() as session:
-                from db.models import File, Chunk
+                from db.models import File, Chunk, User
                 
                 total_files = session.query(File).filter_by(deleted_at=None).count()
                 total_chunks = session.query(Chunk).count()
+                total_users = session.query(User).count()
             
             return cloud_storage_pb2.SystemStatusResponse(
                 success=True,
                 global_capacity_bytes=stats['global_capacity'],
                 global_allocated_bytes=stats['user_allocated'],
                 global_used_bytes=stats['global_used'],
-                total_users=len([]),  # Will be implemented
+                total_users=total_users,
                 total_nodes=stats['total_nodes'],
                 online_nodes=stats['online_nodes'],
                 total_files=total_files,
@@ -718,6 +729,142 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
         
         except Exception as e:
             print(f"[ERROR] Get system status failed: {e}")
+            context.abort(grpc.StatusCode.INTERNAL, str(e))
+    
+    def ListAllUsers(self, request, context):
+        """List all users - NOW IMPLEMENTED"""
+        try:
+            if request.admin_key != ADMIN_KEY:
+                context.abort(grpc.StatusCode.PERMISSION_DENIED, "Invalid admin key")
+            
+            with get_db_session() as session:
+                from db.models import User, File
+                
+                users = session.query(User).all()
+                
+                user_list = []
+                for user in users:
+                    # Count files for each user
+                    file_count = session.query(File).filter_by(
+                        user_id=user.user_id,
+                        deleted_at=None
+                    ).count()
+                    
+                    user_list.append(cloud_storage_pb2.UserInfo(
+                        user_id=user.user_id,
+                        email=user.email,
+                        name=user.name,
+                        storage_allocated=user.storage_allocated,
+                        storage_used=user.storage_used,
+                        created_at=user.created_at.isoformat(),
+                        last_login=user.last_login.isoformat() if user.last_login else "",
+                        file_count=file_count
+                    ))
+                
+                return cloud_storage_pb2.ListUsersResponse(
+                    success=True,
+                    users=user_list
+                )
+        
+        except Exception as e:
+            print(f"[ERROR] List users failed: {e}")
+            context.abort(grpc.StatusCode.INTERNAL, str(e))
+    
+    def ListAllNodes(self, request, context):
+        """List all storage nodes - NOW IMPLEMENTED"""
+        try:
+            if request.admin_key != ADMIN_KEY:
+                context.abort(grpc.StatusCode.PERMISSION_DENIED, "Invalid admin key")
+            
+            with get_db_session() as session:
+                from db.models import StorageNode, Chunk
+                
+                nodes = session.query(StorageNode).all()
+                online_threshold = get_utcnow() - timedelta(minutes=2)
+                
+                node_list = []
+                for node in nodes:
+                    # Count chunks on this node
+                    chunk_count = session.query(Chunk).filter_by(
+                        primary_node_id=node.node_id
+                    ).count()
+                    
+                    # Determine online status
+                    is_online = node.last_heartbeat and node.last_heartbeat > online_threshold
+                    status = 'online' if is_online else 'offline'
+                    
+                    node_list.append(cloud_storage_pb2.NodeInfo(
+                        node_id=node.node_id,
+                        host=node.host,
+                        port=node.port,
+                        storage_capacity=node.storage_capacity,
+                        storage_used=node.storage_used,
+                        status=status,
+                        last_heartbeat=node.last_heartbeat.isoformat() if node.last_heartbeat else "",
+                        chunk_count=chunk_count,
+                        health_score=node.health_score
+                    ))
+                
+                return cloud_storage_pb2.ListNodesResponse(
+                    success=True,
+                    nodes=node_list
+                )
+        
+        except Exception as e:
+            print(f"[ERROR] List nodes failed: {e}")
+            context.abort(grpc.StatusCode.INTERNAL, str(e))
+    
+    def GetUserDetails(self, request, context):
+        """Get detailed user information - NOW IMPLEMENTED"""
+        try:
+            if request.admin_key != ADMIN_KEY:
+                context.abort(grpc.StatusCode.PERMISSION_DENIED, "Invalid admin key")
+            
+            user_id = request.user_id
+            
+            with get_db_session() as session:
+                from db.models import User, File
+                
+                user = session.query(User).filter_by(user_id=user_id).first()
+                
+                if not user:
+                    context.abort(grpc.StatusCode.NOT_FOUND, "User not found")
+                
+                # Get user's files
+                files = session.query(File).filter_by(
+                    user_id=user_id,
+                    deleted_at=None
+                ).order_by(File.created_at.desc()).all()
+                
+                file_entries = []
+                for file in files:
+                    file_entries.append(cloud_storage_pb2.FileEntry(
+                        file_id=file.file_id,
+                        filename=file.filename,
+                        file_size=file.file_size,
+                        mime_type=file.mime_type,
+                        created_at=file.created_at.isoformat(),
+                        modified_at=file.modified_at.isoformat(),
+                        is_shared=file.is_shared
+                    ))
+                
+                return cloud_storage_pb2.UserDetailsResponse(
+                    success=True,
+                    user=cloud_storage_pb2.UserInfo(
+                        user_id=user.user_id,
+                        email=user.email,
+                        name=user.name,
+                        storage_allocated=user.storage_allocated,
+                        storage_used=user.storage_used,
+                        created_at=user.created_at.isoformat(),
+                        last_login=user.last_login.isoformat() if user.last_login else "",
+                        file_count=len(files)
+                    ),
+                    files=file_entries
+                )
+        
+        except Exception as e:
+            print(f"[ERROR] Get user details failed: {e}")
             context.abort(grpc.StatusCode.INTERNAL, str(e))
     
     def StreamSystemEvents(self, request, context):
@@ -738,6 +885,27 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
         
         except Exception as e:
             print(f"[ERROR] Event stream failed: {e}")
+    
+    def UpdateGlobalStorage(self, request, context):
+        """Update global storage capacity"""
+        try:
+            if request.admin_key != ADMIN_KEY:
+                context.abort(grpc.StatusCode.PERMISSION_DENIED, "Invalid admin key")
+            
+            # This is now handled dynamically by nodes
+            # So we just return current stats
+            stats = node_manager.get_storage_statistics()
+            
+            return cloud_storage_pb2.UpdateStorageResponse(
+                success=True,
+                message="Storage is managed dynamically by nodes",
+                old_capacity_bytes=stats['global_capacity'],
+                new_capacity_bytes=stats['global_capacity']
+            )
+        
+        except Exception as e:
+            print(f"[ERROR] Update storage failed: {e}")
+            context.abort(grpc.StatusCode.INTERNAL, str(e))
 
 
 def serve():
