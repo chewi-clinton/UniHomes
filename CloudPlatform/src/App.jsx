@@ -1,10 +1,10 @@
 import "./App.css";
-import Dashboard from "./pages/Dashboard";
+import FileManager from "./pages/FileManager";
 
 function App() {
   return (
     <>
-      <Dashboard />
+      <FileManager />
     </>
   );
 }

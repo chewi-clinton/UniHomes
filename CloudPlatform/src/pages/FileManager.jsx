@@ -4,10 +4,10 @@ import "../styles/filemanager.css";
 // Placeholder for icons
 const Icon = ({ name, className = "" }) => {
   const iconMap = {
-    "upload-cloud": "☁️", // Cloud icon
-    "file-pdf": "📄", // For PDF
-    "file-docx": "📄", // For DOCX
-    "file-png": "🖼️", // For PNG
+    "upload-cloud": "☁️",
+    "file-pdf": "📄",
+    "file-docx": "📄",
+    "file-png": "🖼️",
     folder: "📁",
     options: "⋮", // Three dots
     close: "✕", // Close/cancel
