@@ -325,25 +325,36 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             session_token = request.session_token
             file_id = request.file_id
             
+            print(f"[DOWNLOAD] Request received for file: {file_id}")
+            
             # Create a new database session for the entire operation
             with get_db_session() as db_session:
                 # Get user from session token within this session
                 user = self._get_user_from_session_token(session_token, db_session)
                 if not user:
+                    print(f"[ERROR] Invalid session token: {session_token}")
                     context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
                 
                 user_id = user.user_id
                 user_email = user.email
                 
+                print(f"[DOWNLOAD] User {user_email} ({user_id}) requesting file {file_id}")
+                
                 # Get file metadata
                 file_info = file_manager.get_file(file_id, user_id)
                 if not file_info:
+                    print(f"[ERROR] File not found: {file_id}")
                     context.abort(grpc.StatusCode.NOT_FOUND, "File not found")
                 
                 print(f"[DOWNLOAD] Starting: {file_info['filename']} for user {user_email}")
                 
                 # Get chunks
                 chunks = file_manager.get_file_chunks(file_id)
+                print(f"[DOWNLOAD] Found {len(chunks)} chunks for file {file_id}")
+                
+                # Log chunk details
+                for i, chunk in enumerate(chunks):
+                    print(f"[CHUNK] Chunk {i}: {chunk}")
                 
                 # Send file info first
                 yield cloud_storage_pb2.DownloadFileResponse(
@@ -357,13 +368,16 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
                 
                 # Stream chunks
                 for chunk_info in chunks:
-                    chunk_data = self._retrieve_chunk_from_node(chunk_info)
+                    print(f"[DOWNLOAD] Retrieving chunk {chunk_info['chunk_index']}")
+                    chunk_data = self._retrieve_chunk_from_node(chunk_info, file_id)
                     
                     if chunk_data:
+                        print(f"[DOWNLOAD] Successfully retrieved chunk {chunk_info['chunk_index']} ({len(chunk_data)} bytes)")
                         yield cloud_storage_pb2.DownloadFileResponse(
                             chunk_data=chunk_data
                         )
                     else:
+                        print(f"[ERROR] Failed to retrieve chunk {chunk_info['chunk_index']}")
                         context.abort(grpc.StatusCode.DATA_LOSS, f"Failed to retrieve chunk {chunk_info['chunk_index']}")
                 
                 emit_event(
@@ -377,32 +391,52 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
         
         except Exception as e:
             print(f"[ERROR] Download failed: {e}")
+            import traceback
+            traceback.print_exc()
             context.abort(grpc.StatusCode.INTERNAL, str(e))
     
-    def _retrieve_chunk_from_node(self, chunk_info):
+    def _retrieve_chunk_from_node(self, chunk_info, file_id):
         """Retrieve chunk from storage node"""
         try:
+            # Get the chunk index from the chunk info
+            chunk_index = chunk_info.get('chunk_index')
+            
+            if chunk_index is None:
+                print(f"[CHUNK] Missing chunk_index in chunk_info")
+                return None
+            
+            # Construct the chunk ID in the format expected by the storage node
+            chunk_id = f"{file_id}_chunk_{chunk_index}"
+            print(f"[CHUNK] Retrieving chunk {chunk_id}")
+            
             node_info, error = chunk_distributor.get_node_for_retrieval(chunk_info['chunk_id'])
             
             if error:
-                print(f"[ERROR] {error}")
+                print(f"[CHUNK] Error getting node for retrieval: {error}")
                 return None
+            
+            print(f"[CHUNK] Using node {node_info['host']}:{node_info['port']}")
             
             channel = grpc.insecure_channel(f"{node_info['host']}:{node_info['port']}")
             stub = cloud_storage_pb2_grpc.NodeServiceStub(channel)
             
             response = stub.RetrieveChunk(cloud_storage_pb2.RetrieveChunkRequest(
-                chunk_id=chunk_info['chunk_id']
+                chunk_id=chunk_id
             ))
             
             channel.close()
             
             if response.success:
+                print(f"[CHUNK] Successfully retrieved chunk {chunk_id} ({len(response.chunk_data)} bytes)")
                 return response.chunk_data
-            return None
+            else:
+                print(f"[CHUNK] Node returned error for chunk {chunk_id}: {response.message}")
+                return None
         
         except Exception as e:
             print(f"[ERROR] Failed to retrieve chunk: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def ListFiles(self, request, context):
