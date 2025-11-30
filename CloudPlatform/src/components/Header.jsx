@@ -1,41 +1,60 @@
 import React from "react";
+import { Link } from "react-router-dom"; // Make sure to import Link
 import "../styles/header.css";
-import logo from "../assets/logo.png"; // Reusing your logo
+import logo from "../assets/logo.png";
+// Ensure this path is correct for the Icon component
 
-// Placeholder for icons
-const Icon = ({ name, className = "" }) => {
-  const iconMap = {
-    search: "🔍",
-    bell: "🔔",
-  };
-  return <span className={`icon ${className}`}>{iconMap[name] || name}</span>;
-};
+const Header = ({
+  activeLink = "Dashboard", // Default active link for highlighting
+  storageUsedGB = 328,
+  storageTotalGB = 1000,
+}) => {
+  const usagePercent = Math.round((storageUsedGB / storageTotalGB) * 100);
 
-const Header = ({ userName = "AD" }) => {
+  // List of navigation items with paths
+  const navItems = [
+    { name: "Dashboard", path: "/dashboard" },
+    { name: "Files", path: "/files" },
+    { name: "Nodes", path: "/nodes" },
+    { name: "Admin", path: "/admin" },
+  ];
+
   return (
-    <header className="app-header">
-      {/* Brand Group */}
-      <div className="header-brand-group">
-        <img src={logo} alt="CloudVault Logo" className="header-logo" />
-        <span className="header-brand-name">CloudVault</span>
+    <header className="compact-header-container">
+      {/* --- Left Side: Logo and Navigation --- */}
+      <div className="brand-section">
+        <img src={logo} alt="CloudGrips Logo" className="brand-logo" />
+        <span className="brand-name">CloudPlatform</span>
+
+        <nav className="header-nav">
+          {navItems.map((item) => (
+            <Link
+              key={item.name}
+              to={item.path}
+              className={`nav-link ${activeLink === item.name ? "active" : ""}`}
+            >
+              {item.name}
+            </Link>
+          ))}
+        </nav>
       </div>
 
-      {/* Global Search Bar */}
-      <div className="header-search-bar">
-        <Icon name="search" className="header-search-icon" />
-        <input type="text" placeholder="Search files, users, and settings..." />
-      </div>
-
-      {/* Actions and Profile */}
-      <div className="header-actions">
-        {/* Notifications */}
-        <div className="action-icon-wrapper">
-          <Icon name="bell" className="action-icon" />
-          <span className="notification-dot"></span>
+      {/* --- Right Side: Storage and Profile --- */}
+      <div className="right-actions">
+        <div className="storage-indicator">
+          <span className="storage-percentage">Storage {usagePercent}%</span>
+          <div className="progress-bar-stack">
+            <div className="progress-bar-container">
+              <div
+                className="progress-fill"
+                style={{ width: `${usagePercent}%` }}
+              ></div>
+            </div>
+            <span className="storage-usage-text">
+              Used {storageUsedGB} GB of {storageTotalGB} GB
+            </span>
+          </div>
         </div>
-
-        {/* User Profile */}
-        <div className="user-avatar">{userName}</div>
       </div>
     </header>
   );

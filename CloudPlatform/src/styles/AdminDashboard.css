@@ -1,0 +1,170 @@
+/* --- Variables (Consistent Theme) --- */
+:root {
+  --bg-dark: #0b0f19;
+  --card-bg: #111827;
+  --input-bg: #1f2937;
+  --border-color: #374151;
+  --text-white: #ffffff;
+  --text-gray: #9ca3af;
+  --primary-blue: #2563eb;
+  --primary-hover: #1d4ed8;
+
+  /* Status and Accent Colors */
+  --green-status: #10b981; /* For Online/Positive */
+  --progress-track: #1f2937;
+  --progress-fill: var(--primary-blue);
+  --header-bg: #0b0f19;
+}
+
+/* --- Page Layout --- */
+.admin-overview-page {
+  padding: 30px;
+  background-color: var(--bg-dark);
+  min-height: 100vh;
+}
+
+/* --- Header Section --- */
+.overview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+}
+
+.overview-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-white);
+}
+
+.new-node-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background-color: var(--primary-blue);
+  color: var(--text-white);
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.new-node-btn:hover {
+  background-color: var(--primary-hover);
+}
+
+/* --- Navigation Tabs --- */
+.overview-tab-nav {
+  display: flex;
+  border-bottom: 2px solid var(--border-color);
+  margin-bottom: 40px;
+}
+
+.tab-nav-item {
+  padding: 10px 0;
+  margin-right: 30px;
+  cursor: pointer;
+  color: var(--text-gray);
+  font-weight: 600;
+  transition: color 0.2s;
+  font-size: 1rem;
+}
+
+.tab-nav-item.active {
+  color: var(--text-white);
+  border-bottom: 2px solid var(--primary-blue);
+  margin-bottom: -2px; /* Pulls up to hide the bottom border line */
+}
+
+/* --- Section Titles --- */
+.section-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--text-white);
+  margin-bottom: 25px;
+}
+
+/* --- System Overview KPIs --- */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  margin-bottom: 50px;
+}
+
+.kpi-card {
+  background-color: var(--card-bg);
+  padding: 25px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.kpi-metric {
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: var(--text-white);
+  line-height: 1.1;
+  margin-bottom: 5px;
+}
+
+.kpi-label {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-gray);
+}
+
+/* --- Storage Status Section --- */
+.storage-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.storage-status-card {
+  background-color: var(--card-bg);
+  padding: 25px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.storage-status-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.storage-status-label {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-white);
+}
+
+.storage-status-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-white);
+}
+
+.storage-progress-bar-container {
+  width: 100%;
+  background-color: var(--progress-track);
+  border-radius: 8px;
+  height: 10px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.storage-progress-fill {
+  height: 100%;
+  background-color: var(--progress-fill);
+  border-radius: 8px;
+}
+
+.storage-status-info {
+  font-size: 0.9rem;
+  color: var(--text-gray);
+}

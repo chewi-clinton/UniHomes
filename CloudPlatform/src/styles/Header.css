@@ -1,3 +1,4 @@
+/* --- Variables (Consistent Theme) --- */
 :root {
   --bg-dark: #0b0f19;
   --card-bg: #111827;
@@ -7,111 +8,155 @@
   --text-gray: #9ca3af;
   --primary-blue: #2563eb;
   --primary-hover: #1d4ed8;
-  --notification-dot: #ef4444;
+
+  /* Header-specific dimensions and colors */
+  --header-height: 55px;
+  --header-bg: #0b0f19; /* Use the darkest background for a strong top bar */
+  --nav-link-color: var(--text-gray);
+  --nav-link-active: var(--text-white);
+  --progress-track: #1f2937;
+  --progress-fill: var(--primary-blue);
+  --profile-bg: #2d3748;
 }
 
-/* --- Main Application Header --- */
-.app-header {
-  height: 70px;
-  background-color: var(--card-bg);
+/* --- Layout and Structure --- */
+.compact-header-container {
+  height: var(--header-height);
+  background-color: var(--header-bg);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 30px;
+  padding: 0 20px;
   border-bottom: 1px solid var(--border-color);
   width: 100%;
-  flex-shrink: 0; /* Prevents header from shrinking in layout */
 }
 
-/* --- Brand Header/Logo --- */
-.header-brand-group {
+/* --- Logo and Brand --- */
+.brand-section {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 15px;
+  flex-shrink: 0;
 }
 
-.header-logo {
-  height: 32px;
+.brand-logo {
+  height: 28px;
   width: auto;
 }
 
-.header-brand-name {
+.brand-name {
+  color: var(--text-white);
   font-size: 1.1rem;
   font-weight: 700;
-  color: var(--text-white);
 }
 
-/* --- Search Bar --- */
-.header-search-bar {
+/* --- Navigation Links (Center) --- */
+.header-nav {
   display: flex;
   align-items: center;
-  width: 400px;
-  background-color: var(--input-bg);
-  border-radius: 8px;
-  padding: 8px 15px;
-  gap: 10px;
-  border: 1px solid var(--border-color);
+  gap: 30px;
+  margin: 0 40px;
 }
 
-.header-search-bar input {
-  flex-grow: 1;
-  background: none;
-  border: none;
-  outline: none;
-  color: var(--text-white);
+.nav-link {
+  color: var(--nav-link-color);
   font-size: 0.95rem;
-}
-
-.header-search-bar input::placeholder {
-  color: var(--text-gray);
-}
-
-.header-search-icon {
-  color: var(--text-gray);
-  font-size: 1.1rem;
-}
-
-/* --- Actions/Profile --- */
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-
-.action-icon-wrapper {
-  position: relative;
-}
-
-.action-icon {
-  font-size: 1.4rem;
-  color: var(--text-gray);
-  cursor: pointer;
+  font-weight: 500;
+  text-decoration: none;
   transition: color 0.2s;
+  padding: 0 5px;
+  cursor: pointer;
 }
 
-.action-icon:hover {
+.nav-link:hover {
   color: var(--text-white);
 }
 
-.notification-dot {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  width: 8px;
-  height: 8px;
-  background-color: var(--notification-dot);
-  border-radius: 50%;
+.nav-link.active {
+  color: var(--nav-link-active);
+  font-weight: 600;
+}
+
+/* --- Right Side: Storage and Profile --- */
+.right-actions {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  flex-shrink: 0;
+}
+
+/* --- Storage Indicator --- */
+.storage-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.storage-percentage {
+  color: var(--text-white);
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.progress-bar-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.progress-bar-container {
+  width: 120px;
+  height: 6px;
+  background-color: var(--progress-track);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.progress-fill {
+  height: 100%;
+  background-color: var(--progress-fill);
+  border-radius: 3px;
+}
+
+.storage-usage-text {
+  color: var(--text-gray);
+  font-size: 0.75rem;
+}
+
+/* --- Profile Dropdown --- */
+.profile-dropdown-btn {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--profile-bg);
+  border-radius: 20px;
+  padding: 0 8px 0 2px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.profile-dropdown-btn:hover {
+  background-color: #3f4757;
 }
 
 .user-avatar {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background-color: var(--primary-blue);
+  background-color: var(--primary-blue); /* Placeholder if no image */
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
   font-size: 0.9rem;
-  cursor: pointer;
+  color: var(--text-white);
+  border: 2px solid var(--profile-bg); /* Match background color */
+}
+
+.dropdown-icon {
+  color: var(--text-gray);
+  font-size: 1rem;
 }
