@@ -45,3 +45,4 @@ build/
 *.swp
 *.swo#
 .env
+.DS_Store
