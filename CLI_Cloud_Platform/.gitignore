@@ -1,0 +1,47 @@
+# Ignore Python bytecode
+__pycache__/
+*.py[cod]
+
+# Ignore virtual environment directories
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Ignore coverage reports
+.coverage
+*.cover
+*.log
+
+# Ignore testing data
+tests/__pycache__/
+tests/*.pyc
+
+# Ignore mypy and type checker files
+.mypy_cache/
+.dmypy.json
+*.mypy_cache/
+
+# Ignore type hinting cache
+__pypackages__/
+
+# Ignore Python egg files and distributions
+*.egg-info/
+dist/
+build/
+
+# Ignore configuration files
+*.env
+*.db
+
+# Ignore IDE/editor specific files
+.vscode/
+.idea/
+*.swp
+*.swo#
+.env
