@@ -36,10 +36,32 @@ def generate_proto():
         print("\n✓ Protobuf files generated successfully!")
         print("  - generated/cloud_storage_pb2.py")
         print("  - generated/cloud_storage_pb2_grpc.py")
+        
+        # Fix the import in the grpc file
+        fix_grpc_imports()
     else:
         print("\n✗ Failed to generate protobuf files")
         print(f"Error: {result.stderr}")
         sys.exit(1)
+
+def fix_grpc_imports():
+    """Fix absolute imports to relative imports in generated grpc file"""
+    grpc_file = os.path.join('generated', 'cloud_storage_pb2_grpc.py')
+    
+    if os.path.exists(grpc_file):
+        with open(grpc_file, 'r') as f:
+            content = f.read()
+        
+        # Replace absolute import with relative import
+        content = content.replace(
+            'import cloud_storage_pb2 as cloud__storage__pb2',
+            'from . import cloud_storage_pb2 as cloud__storage__pb2'
+        )
+        
+        with open(grpc_file, 'w') as f:
+            f.write(content)
+        
+        print("\n✓ Fixed imports in cloud_storage_pb2_grpc.py")
 
 if __name__ == '__main__':
     generate_proto()
