@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { filesAPI } from "../services/api";
 import { toast } from "sonner";
@@ -19,12 +19,7 @@ import {
   Archive,
   Search,
 } from "lucide-react";
-import {
-  formatFileSize,
-  formatDate,
-  getFileType,
-  generateFileIcon,
-} from "../utils/helpers";
+import { formatFileSize, formatDate, getFileType } from "../utils/helpers";
 import { FileSkeleton, ListSkeleton } from "../components/LoadingSpinner";
 import FileUpload from "../components/FileUpload";
 import ContextMenu from "../components/ContextMenu";
@@ -40,6 +35,7 @@ const DashboardPage = () => {
   const [contextMenu, setContextMenu] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [downloading, setDownloading] = useState(null);
 
   useEffect(() => {
     loadFiles();
@@ -50,12 +46,10 @@ const DashboardPage = () => {
       setLoading(true);
       const response = await filesAPI.listFiles(folderId);
       if (response.data.success) {
-        // FIX: Combine files and folders into a single array
         const data = response.data.data;
         const allFiles = data.files || [];
         const allFolders = data.folders || [];
 
-        // Transform folders to match the expected structure
         const transformedFolders = allFolders.map((folder) => ({
           id: folder.folder_id,
           name: folder.folder_name,
@@ -64,7 +58,6 @@ const DashboardPage = () => {
           file_count: folder.file_count,
         }));
 
-        // Transform files to match the expected structure
         const transformedFiles = allFiles.map((file) => ({
           id: file.file_id,
           name: file.filename,
@@ -76,7 +69,6 @@ const DashboardPage = () => {
           is_shared: file.is_shared,
         }));
 
-        // Combine folders first, then files
         setFiles([...transformedFolders, ...transformedFiles]);
       }
     } catch (error) {
@@ -130,19 +122,110 @@ const DashboardPage = () => {
   };
 
   const handleFileDownload = async (file) => {
+    if (downloading) {
+      console.log("[DOWNLOAD] Already downloading a file");
+      return;
+    }
+
     try {
+      setDownloading(file.id);
+      console.log(`[DOWNLOAD] Starting download for ${file.name} (${file.id})`);
+
+      // Show loading toast
+      const loadingToast = toast.loading(`Downloading ${file.name}...`);
+
+      // Make the download request
       const response = await filesAPI.downloadFile(file.id);
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+
+      console.log(`[DOWNLOAD] Response received`);
+      console.log(`[DOWNLOAD] Status:`, response.status);
+      console.log(`[DOWNLOAD] Response type:`, response.data.type);
+      console.log(`[DOWNLOAD] Response size:`, response.data.size, "bytes");
+
+      // Check if we got an error response disguised as blob
+      if (response.data.type === "application/json") {
+        // This is likely an error response
+        const text = await response.data.text();
+        console.error("[DOWNLOAD ERROR] Received JSON error:", text);
+        const errorData = JSON.parse(text);
+        throw new Error(errorData.message || "Download failed");
+      }
+
+      // Verify we received blob data
+      if (!response.data || !(response.data instanceof Blob)) {
+        throw new Error("Invalid response: expected Blob data");
+      }
+
+      if (response.data.size === 0) {
+        throw new Error(
+          "Received empty file - file may not have been uploaded correctly"
+        );
+      }
+
+      // Create blob with correct mime type
+      const blob = new Blob([response.data], {
+        type:
+          file.mime_type || response.data.type || "application/octet-stream",
+      });
+
+      console.log(`[DOWNLOAD] Blob created, size: ${blob.size} bytes`);
+
+      // Create object URL
+      const url = window.URL.createObjectURL(blob);
+      console.log(`[DOWNLOAD] Object URL created`);
+
+      // Create and trigger download link
       const link = document.createElement("a");
       link.href = url;
       link.download = file.name;
+      link.style.display = "none";
+
+      // Add to DOM
       document.body.appendChild(link);
+
+      // Trigger click
+      console.log(`[DOWNLOAD] Triggering download for: ${file.name}`);
       link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+
+      // Cleanup after a delay
+      setTimeout(() => {
+        console.log(`[DOWNLOAD] Cleaning up resources`);
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }, 100);
+
+      // Dismiss loading toast and show success
+      toast.dismiss(loadingToast);
       toast.success(`${file.name} downloaded successfully!`);
+
+      console.log(`[DOWNLOAD] Download completed for ${file.name}`);
     } catch (error) {
-      toast.error(`Failed to download ${file.name}`);
+      console.error(`[DOWNLOAD ERROR]`, error);
+      console.error(`[DOWNLOAD ERROR] Stack:`, error.stack);
+
+      // Show detailed error message
+      let errorMsg = "Download failed";
+
+      if (error.response?.data) {
+        // Try to parse error from response
+        if (error.response.data instanceof Blob) {
+          try {
+            const text = await error.response.data.text();
+            const errorData = JSON.parse(text);
+            errorMsg = errorData.message || errorMsg;
+          } catch (e) {
+            errorMsg = "Unable to download file";
+          }
+        } else {
+          errorMsg = error.response.data.message || errorMsg;
+        }
+      } else if (error.message) {
+        errorMsg = error.message;
+      }
+
+      toast.error(`Failed to download ${file.name}: ${errorMsg}`);
+    } finally {
+      setDownloading(null);
     }
   };
 
@@ -150,7 +233,6 @@ const DashboardPage = () => {
     if (file.type === "folder") {
       navigate(`/dashboard/${file.id}`);
     } else {
-      // For files, you could open a preview or download
       handleFileDownload(file);
     }
   };
@@ -171,7 +253,6 @@ const DashboardPage = () => {
   const getFileIcon = (file) => {
     if (file.type === "folder")
       return <Folder className="w-8 h-8 text-amber-500" />;
-
     const fileType = getFileType(file.name);
     switch (fileType) {
       case "image":
@@ -213,7 +294,6 @@ const DashboardPage = () => {
             {filteredFiles.length === 1 ? "item" : "items"}
           </p>
         </div>
-
         <div className="flex items-center space-x-3">
           {/* Search */}
           <div className="relative">
@@ -226,7 +306,6 @@ const DashboardPage = () => {
             />
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           </div>
-
           {/* Upload Button */}
           <button
             onClick={() => setShowUpload(true)}
@@ -235,7 +314,6 @@ const DashboardPage = () => {
             <Upload className="w-4 h-4" />
             <span>Upload</span>
           </button>
-
           {/* New Folder Button */}
           <button
             onClick={handleFolderCreate}
@@ -244,7 +322,6 @@ const DashboardPage = () => {
             <FolderPlus className="w-4 h-4" />
             <span>New Folder</span>
           </button>
-
           {/* View Toggle */}
           <div className="flex bg-accent rounded-lg p-1">
             <button
@@ -297,12 +374,18 @@ const DashboardPage = () => {
           {filteredFiles.map((file) => (
             <div
               key={file.id}
-              onClick={() => handleFileClick(file)}
+              onClick={() => !downloading && handleFileClick(file)}
               onContextMenu={(e) => handleContextMenu(e, file)}
-              className="bg-card border rounded-lg p-4 hover:shadow-lg hover:-translate-y-1 transition-all cursor-pointer group"
+              className={`bg-card border rounded-lg p-4 hover:shadow-lg hover:-translate-y-1 transition-all cursor-pointer group ${
+                downloading === file.id ? "opacity-50 pointer-events-none" : ""
+              }`}
             >
               <div className="flex items-center justify-center h-24 mb-4">
-                {getFileIcon(file)}
+                {downloading === file.id ? (
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                ) : (
+                  getFileIcon(file)
+                )}
               </div>
               <h3 className="font-medium truncate mb-1">{file.name}</h3>
               <p className="text-sm text-muted-foreground mb-2">
@@ -324,11 +407,19 @@ const DashboardPage = () => {
           {filteredFiles.map((file) => (
             <div
               key={file.id}
-              onClick={() => handleFileClick(file)}
+              onClick={() => !downloading && handleFileClick(file)}
               onContextMenu={(e) => handleContextMenu(e, file)}
-              className="bg-card border rounded-lg p-4 hover:shadow-md transition-all cursor-pointer group flex items-center space-x-4"
+              className={`bg-card border rounded-lg p-4 hover:shadow-md transition-all cursor-pointer group flex items-center space-x-4 ${
+                downloading === file.id ? "opacity-50 pointer-events-none" : ""
+              }`}
             >
-              <div className="flex-shrink-0">{getFileIcon(file)}</div>
+              <div className="flex-shrink-0">
+                {downloading === file.id ? (
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                ) : (
+                  getFileIcon(file)
+                )}
+              </div>
               <div className="flex-1 min-w-0">
                 <h3 className="font-medium truncate">{file.name}</h3>
                 <p className="text-sm text-muted-foreground">
@@ -375,10 +466,15 @@ const DashboardPage = () => {
                 handleFileDownload(selectedFile);
                 setContextMenu(null);
               }}
-              className="w-full px-4 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center space-x-2"
+              disabled={downloading === selectedFile.id}
+              className="w-full px-4 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center space-x-2 disabled:opacity-50"
             >
               <Download className="w-4 h-4" />
-              <span>Download</span>
+              <span>
+                {downloading === selectedFile.id
+                  ? "Downloading..."
+                  : "Download"}
+              </span>
             </button>
           )}
           <button
@@ -396,5 +492,4 @@ const DashboardPage = () => {
     </div>
   );
 };
-
 export default DashboardPage;

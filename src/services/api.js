@@ -5,6 +5,7 @@ const API_BASE_URL = "/api";
 // Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 300000, // 5 minutes
   headers: {
     "Content-Type": "application/json",
   },
@@ -51,7 +52,8 @@ export const authAPI = {
 // Files API
 export const filesAPI = {
   listFiles: (folderId) =>
-    api.get("/files", { params: folderId ? { folder_id: folderId } : {} }), // FIXED: was folder_id, now folderId
+    api.get("/files", { params: folderId ? { folder_id: folderId } : {} }),
+
   uploadFile: (file, folderId, onProgress) => {
     const formData = new FormData();
     formData.append("file", file);
@@ -63,6 +65,7 @@ export const filesAPI = {
       headers: {
         "Content-Type": "multipart/form-data",
       },
+      timeout: 600000, // 10 minutes for large files
       onUploadProgress: (progressEvent) => {
         if (onProgress) {
           const percentCompleted = Math.round(
@@ -73,19 +76,46 @@ export const filesAPI = {
       },
     });
   },
-  downloadFile: (fileId) =>
-    api.get(`/files/download/${fileId}`, {
+
+  downloadFile: (fileId) => {
+    console.log(`[API] Requesting download for file: ${fileId}`);
+    return api.get(`/files/download/${fileId}`, {
       responseType: "blob",
-    }),
+      timeout: 600000, // 10 minutes for large files
+      onDownloadProgress: (progressEvent) => {
+        if (progressEvent.total) {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / progressEvent.total
+          );
+          console.log(`[API] Download progress: ${percentCompleted}%`);
+        }
+      },
+    });
+  },
+
   deleteFile: (fileId, permanent = false) =>
     api.delete(`/files/${fileId}`, { params: { permanent } }),
+
   createFolder: (name, parentFolderId) =>
-    api.post("/folders", { name, parent_folder_id: parentFolderId }),
+    api.post("/files/folders", {
+      folder_name: name,
+      parent_folder_id: parentFolderId,
+    }),
+
+  shareFile: (fileId, shareWithEmail, permission = "read") =>
+    api.post("/files/share", {
+      file_id: fileId,
+      share_with_email: shareWithEmail,
+      permission,
+    }),
+
+  getSharedFiles: () => api.get("/files/shared"),
 };
 
 // Storage API
 export const storageAPI = {
   getStorageInfo: () => api.get("/storage"),
+  getStorageUsage: () => api.get("/storage/usage"),
 };
 
 // Admin API
