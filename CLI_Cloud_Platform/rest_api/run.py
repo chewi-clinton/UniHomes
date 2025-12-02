@@ -5,7 +5,7 @@ import os
 project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
-from rest_api.app import create_app
+from app import create_app  # Changed from rest_api.app to just app
 
 app = create_app()
 

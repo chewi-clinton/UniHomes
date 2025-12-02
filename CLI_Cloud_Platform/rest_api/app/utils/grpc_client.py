@@ -4,12 +4,11 @@ import grpc
 import json
 from datetime import datetime
 
-# Add project root to Python path to import generated protobufs
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 sys.path.insert(0, project_root)
 
-from generated import cloud_storage_pb2
-from generated import cloud_storage_pb2_grpc
+# Now import from the generated folder
+from generated import cloud_storage_pb2, cloud_storage_pb2_grpc
 
 class GrpcClient:
     def __init__(self, server_address):
