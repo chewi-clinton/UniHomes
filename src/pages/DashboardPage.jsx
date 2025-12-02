@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { filesAPI } from '../services/api'
-import { toast } from 'sonner'
-import { 
-  Upload, 
-  FolderPlus, 
-  Grid, 
-  List, 
-  Download, 
-  Trash2, 
+import React, { useState, useEffect, useCallback } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { filesAPI } from "../services/api";
+import { toast } from "sonner";
+import {
+  Upload,
+  FolderPlus,
+  Grid,
+  List,
+  Download,
+  Trash2,
   MoreVertical,
   File,
   Folder,
@@ -17,139 +17,179 @@ import {
   Video,
   Music,
   Archive,
-  Search
-} from 'lucide-react'
-import { formatFileSize, formatDate, getFileType, generateFileIcon } from '../utils/helpers'
-import { FileSkeleton, ListSkeleton } from '../components/LoadingSpinner'
-import FileUpload from '../components/FileUpload'
-import ContextMenu from '../components/ContextMenu'
-import Breadcrumb from '../components/Breadcrumb'
+  Search,
+} from "lucide-react";
+import {
+  formatFileSize,
+  formatDate,
+  getFileType,
+  generateFileIcon,
+} from "../utils/helpers";
+import { FileSkeleton, ListSkeleton } from "../components/LoadingSpinner";
+import FileUpload from "../components/FileUpload";
+import ContextMenu from "../components/ContextMenu";
+import Breadcrumb from "../components/Breadcrumb";
 
 const DashboardPage = () => {
-  const { folderId } = useParams()
-  const navigate = useNavigate()
-  const [files, setFiles] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [viewMode, setViewMode] = useState('grid')
-  const [showUpload, setShowUpload] = useState(false)
-  const [contextMenu, setContextMenu] = useState(null)
-  const [selectedFile, setSelectedFile] = useState(null)
-  const [searchQuery, setSearchQuery] = useState('')
+  const { folderId } = useParams();
+  const navigate = useNavigate();
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState("grid");
+  const [showUpload, setShowUpload] = useState(false);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    loadFiles()
-  }, [folderId])
+    loadFiles();
+  }, [folderId]);
 
   const loadFiles = async () => {
     try {
-      setLoading(true)
-      const response = await filesAPI.listFiles(folderId)
+      setLoading(true);
+      const response = await filesAPI.listFiles(folderId);
       if (response.data.success) {
-        setFiles(response.data.data)
+        // FIX: Combine files and folders into a single array
+        const data = response.data.data;
+        const allFiles = data.files || [];
+        const allFolders = data.folders || [];
+
+        // Transform folders to match the expected structure
+        const transformedFolders = allFolders.map((folder) => ({
+          id: folder.folder_id,
+          name: folder.folder_name,
+          type: "folder",
+          created_at: folder.created_at,
+          file_count: folder.file_count,
+        }));
+
+        // Transform files to match the expected structure
+        const transformedFiles = allFiles.map((file) => ({
+          id: file.file_id,
+          name: file.filename,
+          type: "file",
+          size: file.file_size,
+          mime_type: file.mime_type,
+          created_at: file.created_at,
+          modified_at: file.modified_at,
+          is_shared: file.is_shared,
+        }));
+
+        // Combine folders first, then files
+        setFiles([...transformedFolders, ...transformedFiles]);
       }
     } catch (error) {
-      toast.error('Failed to load files')
-      console.error('Error loading files:', error)
+      toast.error("Failed to load files");
+      console.error("Error loading files:", error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleFileUpload = async (file) => {
     try {
-      const response = await filesAPI.uploadFile(file, folderId)
+      const response = await filesAPI.uploadFile(file, folderId);
       if (response.data.success) {
-        toast.success(`${file.name} uploaded successfully!`)
-        loadFiles()
+        toast.success(`${file.name} uploaded successfully!`);
+        loadFiles();
       }
     } catch (error) {
-      toast.error(`Failed to upload ${file.name}`)
-      console.error('Upload error:', error)
+      toast.error(`Failed to upload ${file.name}`);
+      console.error("Upload error:", error);
     }
-  }
+  };
 
   const handleFolderCreate = async () => {
-    const name = prompt('Enter folder name:')
+    const name = prompt("Enter folder name:");
     if (name && name.trim()) {
       try {
-        const response = await filesAPI.createFolder(name.trim(), folderId)
+        const response = await filesAPI.createFolder(name.trim(), folderId);
         if (response.data.success) {
-          toast.success('Folder created successfully!')
-          loadFiles()
+          toast.success("Folder created successfully!");
+          loadFiles();
         }
       } catch (error) {
-        toast.error('Failed to create folder')
+        toast.error("Failed to create folder");
       }
     }
-  }
+  };
 
   const handleFileDelete = async (file) => {
     if (confirm(`Are you sure you want to delete "${file.name}"?`)) {
       try {
-        const response = await filesAPI.deleteFile(file.id)
+        const response = await filesAPI.deleteFile(file.id);
         if (response.data.success) {
-          toast.success(`${file.name} deleted successfully!`)
-          loadFiles()
+          toast.success(`${file.name} deleted successfully!`);
+          loadFiles();
         }
       } catch (error) {
-        toast.error(`Failed to delete ${file.name}`)
+        toast.error(`Failed to delete ${file.name}`);
       }
     }
-  }
+  };
 
   const handleFileDownload = async (file) => {
     try {
-      const response = await filesAPI.downloadFile(file.id)
-      const url = window.URL.createObjectURL(new Blob([response.data]))
-      const link = document.createElement('a')
-      link.href = url
-      link.download = file.name
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-      toast.success(`${file.name} downloaded successfully!`)
+      const response = await filesAPI.downloadFile(file.id);
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = file.name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success(`${file.name} downloaded successfully!`);
     } catch (error) {
-      toast.error(`Failed to download ${file.name}`)
+      toast.error(`Failed to download ${file.name}`);
     }
-  }
+  };
 
   const handleFileClick = (file) => {
-    if (file.type === 'folder') {
-      navigate(`/dashboard/${file.id}`)
+    if (file.type === "folder") {
+      navigate(`/dashboard/${file.id}`);
     } else {
       // For files, you could open a preview or download
-      handleFileDownload(file)
+      handleFileDownload(file);
     }
-  }
+  };
 
   const handleContextMenu = (e, file) => {
-    e.preventDefault()
-    setSelectedFile(file)
+    e.preventDefault();
+    setSelectedFile(file);
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
-    })
-  }
+    });
+  };
 
-  const filteredFiles = files.filter(file => 
+  const filteredFiles = files.filter((file) =>
     file.name.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  );
 
   const getFileIcon = (file) => {
-    if (file.type === 'folder') return <Folder className="w-8 h-8 text-amber-500" />
-    
-    const fileType = getFileType(file.name)
+    if (file.type === "folder")
+      return <Folder className="w-8 h-8 text-amber-500" />;
+
+    const fileType = getFileType(file.name);
     switch (fileType) {
-      case 'image': return <Image className="w-8 h-8 text-purple-500" />
-      case 'pdf': return <FileText className="w-8 h-8 text-red-500" />
-      case 'doc': return <FileText className="w-8 h-8 text-blue-500" />
-      case 'video': return <Video className="w-8 h-8 text-pink-500" />
-      case 'audio': return <Music className="w-8 h-8 text-indigo-500" />
-      case 'zip': return <Archive className="w-8 h-8 text-yellow-500" />
-      default: return <File className="w-8 h-8 text-gray-500" />
+      case "image":
+        return <Image className="w-8 h-8 text-purple-500" />;
+      case "pdf":
+        return <FileText className="w-8 h-8 text-red-500" />;
+      case "doc":
+        return <FileText className="w-8 h-8 text-blue-500" />;
+      case "video":
+        return <Video className="w-8 h-8 text-pink-500" />;
+      case "audio":
+        return <Music className="w-8 h-8 text-indigo-500" />;
+      case "zip":
+        return <Archive className="w-8 h-8 text-yellow-500" />;
+      default:
+        return <File className="w-8 h-8 text-gray-500" />;
     }
-  }
+  };
 
   if (loading) {
     return (
@@ -157,9 +197,9 @@ const DashboardPage = () => {
         <div className="mb-6">
           <div className="h-8 bg-muted rounded w-1/4 mb-4 animate-pulse"></div>
         </div>
-        {viewMode === 'grid' ? <FileSkeleton /> : <ListSkeleton />}
+        {viewMode === "grid" ? <FileSkeleton /> : <ListSkeleton />}
       </div>
-    )
+    );
   }
 
   return (
@@ -169,10 +209,11 @@ const DashboardPage = () => {
         <div>
           <h1 className="text-2xl font-bold">Files</h1>
           <p className="text-muted-foreground">
-            {filteredFiles.length} {filteredFiles.length === 1 ? 'item' : 'items'}
+            {filteredFiles.length}{" "}
+            {filteredFiles.length === 1 ? "item" : "items"}
           </p>
         </div>
-        
+
         <div className="flex items-center space-x-3">
           {/* Search */}
           <div className="relative">
@@ -207,14 +248,18 @@ const DashboardPage = () => {
           {/* View Toggle */}
           <div className="flex bg-accent rounded-lg p-1">
             <button
-              onClick={() => setViewMode('grid')}
-              className={`p-2 rounded ${viewMode === 'grid' ? 'bg-background' : 'hover:bg-accent/80'} transition-colors`}
+              onClick={() => setViewMode("grid")}
+              className={`p-2 rounded ${
+                viewMode === "grid" ? "bg-background" : "hover:bg-accent/80"
+              } transition-colors`}
             >
               <Grid className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setViewMode('list')}
-              className={`p-2 rounded ${viewMode === 'list' ? 'bg-background' : 'hover:bg-accent/80'} transition-colors`}
+              onClick={() => setViewMode("list")}
+              className={`p-2 rounded ${
+                viewMode === "list" ? "bg-background" : "hover:bg-accent/80"
+              } transition-colors`}
             >
               <List className="w-4 h-4" />
             </button>
@@ -233,7 +278,9 @@ const DashboardPage = () => {
           </div>
           <h3 className="text-lg font-medium mb-2">No files found</h3>
           <p className="text-muted-foreground mb-6">
-            {searchQuery ? 'No files match your search.' : 'Get started by uploading some files.'}
+            {searchQuery
+              ? "No files match your search."
+              : "Get started by uploading some files."}
           </p>
           <button
             onClick={() => setShowUpload(true)}
@@ -245,7 +292,7 @@ const DashboardPage = () => {
       )}
 
       {/* Grid View */}
-      {viewMode === 'grid' && filteredFiles.length > 0 && (
+      {viewMode === "grid" && filteredFiles.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
           {filteredFiles.map((file) => (
             <div
@@ -261,7 +308,7 @@ const DashboardPage = () => {
               <p className="text-sm text-muted-foreground mb-2">
                 {formatDate(file.created_at)}
               </p>
-              {file.type !== 'folder' && (
+              {file.type !== "folder" && (
                 <p className="text-xs text-muted-foreground">
                   {formatFileSize(file.size)}
                 </p>
@@ -272,7 +319,7 @@ const DashboardPage = () => {
       )}
 
       {/* List View */}
-      {viewMode === 'list' && filteredFiles.length > 0 && (
+      {viewMode === "list" && filteredFiles.length > 0 && (
         <div className="space-y-2">
           {filteredFiles.map((file) => (
             <div
@@ -281,24 +328,22 @@ const DashboardPage = () => {
               onContextMenu={(e) => handleContextMenu(e, file)}
               className="bg-card border rounded-lg p-4 hover:shadow-md transition-all cursor-pointer group flex items-center space-x-4"
             >
-              <div className="flex-shrink-0">
-                {getFileIcon(file)}
-              </div>
+              <div className="flex-shrink-0">{getFileIcon(file)}</div>
               <div className="flex-1 min-w-0">
                 <h3 className="font-medium truncate">{file.name}</h3>
                 <p className="text-sm text-muted-foreground">
                   {formatDate(file.created_at)}
                 </p>
               </div>
-              {file.type !== 'folder' && (
+              {file.type !== "folder" && (
                 <div className="text-sm text-muted-foreground">
                   {formatFileSize(file.size)}
                 </div>
               )}
               <button
                 onClick={(e) => {
-                  e.stopPropagation()
-                  handleContextMenu(e, file)
+                  e.stopPropagation();
+                  handleContextMenu(e, file);
                 }}
                 className="opacity-0 group-hover:opacity-100 p-1 hover:bg-accent rounded transition-all"
               >
@@ -324,11 +369,11 @@ const DashboardPage = () => {
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
         >
-          {selectedFile.type !== 'folder' && (
+          {selectedFile.type !== "folder" && (
             <button
               onClick={() => {
-                handleFileDownload(selectedFile)
-                setContextMenu(null)
+                handleFileDownload(selectedFile);
+                setContextMenu(null);
               }}
               className="w-full px-4 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center space-x-2"
             >
@@ -338,8 +383,8 @@ const DashboardPage = () => {
           )}
           <button
             onClick={() => {
-              handleFileDelete(selectedFile)
-              setContextMenu(null)
+              handleFileDelete(selectedFile);
+              setContextMenu(null);
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center space-x-2 text-destructive"
           >
@@ -349,7 +394,7 @@ const DashboardPage = () => {
         </ContextMenu>
       )}
     </div>
-  )
-}
+  );
+};
 
-export default DashboardPage
+export default DashboardPage;
