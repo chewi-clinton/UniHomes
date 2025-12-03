@@ -267,7 +267,7 @@ class CloudCLI:
         
         return True
     
-    def cmd_delete(self, file_id, permanent=False):
+    def cmd_delete(self, file_id, permanent=True):
         """Delete a file"""
         self.print_header("Delete File")
         

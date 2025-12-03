@@ -113,7 +113,7 @@ def upload_file():
 @files_bp.route('/download/<file_id>', methods=['GET'])
 def download_file(file_id):
     """
-    Download file with proper streaming to avoid memory issues
+    Download file with permanent download headers to force download instead of display
     """
     session_token = get_session_token()
     if not session_token:
@@ -148,7 +148,6 @@ def download_file(file_id):
             return error_response("File is empty"), 400
        
         # For debugging: Collect chunks first to verify size
-        # Once working, you can switch to streaming mode (see commented code below)
         file_data = bytearray()
         chunk_count = 0
         
@@ -172,22 +171,24 @@ def download_file(file_id):
             if len(file_data) != file_info.file_size:
                 print(f"[FLASK WARNING] Size mismatch! Expected {file_info.file_size}, got {len(file_data)}")
                 print(f"[FLASK WARNING] Missing {file_info.file_size - len(file_data)} bytes")
-                # Don't fail - return what we have and let client decide
-                # return error_response(f"File download incomplete: expected {file_info.file_size} bytes, got {len(file_data)} bytes"), 500
             
             # Convert to bytes
             file_bytes = bytes(file_data)
             
             print(f"[FLASK] Creating response with {len(file_bytes)} bytes")
             
-            # Return the complete file as a response
+            # Force permanent download with these headers:
+            # 1. Content-Type: application/octet-stream (forces download)
+            # 2. Content-Disposition: attachment (forces download)
+            # 3. Content-Length: actual file size
+            # 4. Cache-Control: no-cache to prevent caching
             response = Response(
                 file_bytes,
-                mimetype=file_info.mime_type or 'application/octet-stream',
+                mimetype='application/octet-stream',  # Force download
                 headers={
                     'Content-Disposition': f'attachment; filename="{file_info.filename}"',
-                    'Content-Type': file_info.mime_type or 'application/octet-stream',
-                    'Content-Length': str(len(file_bytes)),  # Use actual length, not expected
+                    'Content-Type': 'application/octet-stream',  # Force download
+                    'Content-Length': str(len(file_bytes)),
                     'Cache-Control': 'no-cache, no-store, must-revalidate',
                     'Pragma': 'no-cache',
                     'Expires': '0'
@@ -215,114 +216,62 @@ def download_file(file_id):
         traceback.print_exc()
         return error_response(f"Failed to download file: {str(e)}"), 500
 
-
-# ALTERNATIVE: Streaming version (use this once the size issue is fixed on server)
-"""
-@files_bp.route('/download/<file_id>', methods=['GET'])
-def download_file_streaming(file_id):
-    '''
-    Download file with direct streaming (more memory efficient)
-    '''
-    session_token = get_session_token()
-    if not session_token:
-        return error_response("Authentication required"), 401
-   
-    client = get_grpc_client()
-   
-    try:
-        print(f"[FLASK] Starting streaming download for file_id: {file_id}")
-        
-        response_stream = client.file_stub.DownloadFile(
-            cloud_storage_pb2.DownloadFileRequest(
-                session_token=session_token,
-                file_id=file_id
-            )
-        )
-       
-        # Get first response with file info
-        first_response = next(response_stream)
-        
-        if not first_response.HasField('file_info'):
-            return error_response("File not found"), 404
-       
-        file_info = first_response.file_info
-        print(f"[FLASK] Streaming file: {file_info.filename}, size: {file_info.file_size} bytes")
-       
-        if file_info.file_size == 0:
-            return error_response("File is empty"), 400
-       
-        def generate():
-            '''Generator function to stream chunks directly'''
-            try:
-                chunk_count = 0
-                total_bytes = 0
-                
-                for response in response_stream:
-                    if response.HasField('chunk_data'):
-                        chunk = response.chunk_data
-                        chunk_count += 1
-                        total_bytes += len(chunk)
-                        print(f"[FLASK] Streaming chunk {chunk_count}: {len(chunk)} bytes (total: {total_bytes}/{file_info.file_size})")
-                        yield chunk
-                
-                print(f"[FLASK] Stream complete. Total: {total_bytes} bytes from {chunk_count} chunks")
-                
-            except Exception as e:
-                print(f"[FLASK ERROR] Error during streaming: {e}")
-                import traceback
-                traceback.print_exc()
-                raise
-        
-        # Create streaming response
-        response = Response(
-            stream_with_context(generate()),
-            mimetype=file_info.mime_type or 'application/octet-stream',
-            headers={
-                'Content-Disposition': f'attachment; filename="{file_info.filename}"',
-                'Content-Type': file_info.mime_type or 'application/octet-stream',
-                'Content-Length': str(file_info.file_size),
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache',
-                'Expires': '0'
-            }
-        )
-        
-        return response
-            
-    except StopIteration:
-        return error_response("File not found or empty"), 404
-    except grpc.RpcError as e:
-        return error_response(f"gRPC error: {e.details()}"), 500
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return error_response(f"Failed to download file: {str(e)}"), 500
-"""
-
 @files_bp.route('/<file_id>', methods=['DELETE'])
 def delete_file(file_id):
+    """
+    Delete a file - now properly handles chunk cleanup on storage nodes
+    """
     session_token = get_session_token()
     if not session_token:
         return error_response("Authentication required"), 401
    
-    permanent = request.args.get('permanent', 'false').lower() == 'true'
-   
+    # Get permanent parameter from query string (defaults to true for guaranteed cleanup)
+    permanent = request.args.get('permanent', 'true').lower() == 'true'
+    
+    print(f"[FLASK] Delete request for file {file_id}, permanent={permanent}")
+
     client = get_grpc_client()
     try:
-        response = client.file_stub.DeleteFile(
+        # Delete the file via gRPC - this now handles chunk deletion on nodes
+        delete_response = client.file_stub.DeleteFile(
             cloud_storage_pb2.DeleteFileRequest(
                 session_token=session_token,
                 file_id=file_id,
                 permanent=permanent
             )
         )
-        if response.success:
-            return success_response(message=response.message)
-        else:
-            return error_response(response.message), 400
+        
+        if not delete_response.success:
+            print(f"[FLASK] Delete failed: {delete_response.message}")
+            return error_response(delete_response.message), 400
+        
+        print(f"[FLASK] Delete successful: {delete_response.message}")
+        
+        # After successful deletion, force storage quota recalculation as a safety measure
+        if permanent:
+            try:
+                print("[FLASK] Triggering storage recalculation...")
+                recalc_response = client.storage_stub.RecalculateStorage(
+                    cloud_storage_pb2.RecalculateStorageRequest(
+                        session_token=session_token
+                    )
+                )
+                print(f"[FLASK] Storage recalculation result: {recalc_response.success}")
+            except grpc.RpcError as e:
+                # If recalculation fails, log but don't fail the delete operation
+                print(f"[FLASK WARNING] Storage recalculation failed: {e.details()}")
+            except Exception as e:
+                print(f"[FLASK WARNING] Storage recalculation failed: {str(e)}")
+        
+        return success_response(message=delete_response.message)
+        
     except grpc.RpcError as e:
+        print(f"[FLASK ERROR] gRPC error during delete: {e.details()}")
         return error_response(f"gRPC error: {e.details()}"), 500
     except Exception as e:
+        print(f"[FLASK ERROR] Delete failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return error_response(f"Failed to delete file: {str(e)}"), 500
 
 @files_bp.route('/folders', methods=['POST'])

@@ -318,7 +318,39 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
         except Exception as e:
             print(f"[ERROR] Failed to store chunk on node: {e}")
             return False
-    
+        
+    def _delete_chunk_from_node(self, chunk_id, node_id, host, port):
+        
+            try:
+                print(f"[DELETE_CHUNK] Attempting to delete chunk {chunk_id} from node {node_id} at {host}:{port}")
+                
+                # Connect to the storage node
+                channel = grpc.insecure_channel(f'{host}:{port}')
+                stub = cloud_storage_pb2_grpc.NodeServiceStub(channel)
+                
+                # Send delete request
+                response = stub.DeleteChunk(cloud_storage_pb2.DeleteChunkRequest(
+                    chunk_id=chunk_id
+                ))
+                
+                channel.close()
+                
+                if response.success:
+                    print(f"[DELETE_CHUNK] ✓ Successfully deleted chunk {chunk_id} from node {node_id}")
+                    return True
+                else:
+                    print(f"[DELETE_CHUNK] ✗ Failed to delete chunk {chunk_id} from node {node_id}: {response.message}")
+                    return False
+            
+            except grpc.RpcError as e:
+                print(f"[ERROR] gRPC error deleting chunk {chunk_id} from node {node_id}: {e.details()}")
+                return False
+            except Exception as e:
+                print(f"[ERROR] Failed to delete chunk {chunk_id} from node {node_id}: {e}")
+                import traceback
+                traceback.print_exc()
+                return False
+            
     def DownloadFile(self, request, context):
         """Handle file download with streaming"""
         try:
@@ -489,12 +521,19 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             print(f"[ERROR] List files failed: {e}")
             context.abort(grpc.StatusCode.INTERNAL, str(e))
     
+    """
+UPDATED SECTION FOR cloud_server.py
+Replace the DeleteFile method and _delete_chunk_from_nodes method in FileServiceServicer class
+"""
+
     def DeleteFile(self, request, context):
-        """Delete file"""
+        """Delete file - now properly deletes chunks from storage nodes"""
         try:
             session_token = request.session_token
             file_id = request.file_id
             permanent = request.permanent
+            
+            print(f"[gRPC] DeleteFile request: file_id={file_id}, permanent={permanent}")
             
             # Create a new database session for the entire operation
             with get_db_session() as db_session:
@@ -505,15 +544,58 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
                 
                 user_id = user.user_id
                 
-                success, message, chunk_ids = file_manager.delete_file(file_id, user_id, permanent)
+                print(f"[gRPC] User {user_id} deleting file {file_id}")
+                
+                # Delete file and get chunk info with node details
+                success, message, chunk_info = file_manager.delete_file(file_id, user_id, permanent)
                 
                 if not success:
+                    print(f"[gRPC] Delete failed: {message}")
                     context.abort(grpc.StatusCode.NOT_FOUND, message)
                 
-                # If permanent delete, remove chunks from nodes
-                if permanent and chunk_ids:
-                    for chunk_id in chunk_ids:
-                        self._delete_chunk_from_nodes(chunk_id)
+                print(f"[gRPC] File deleted from database: {message}")
+                
+                # If permanent delete, remove chunks from storage nodes
+                if permanent and chunk_info:
+                    print(f"[gRPC] Deleting {len(chunk_info)} chunks from storage nodes...")
+                    
+                    deleted_count = 0
+                    failed_count = 0
+                    
+                    for chunk in chunk_info:
+                        chunk_id = chunk['chunk_id']
+                        
+                        # Delete from primary node
+                        if chunk['node_host'] and chunk['node_port']:
+                            print(f"[gRPC] Deleting chunk {chunk_id} from primary node {chunk['node_id']}")
+                            success = self._delete_chunk_from_node(
+                                chunk_id,
+                                chunk['node_id'],
+                                chunk['node_host'],
+                                chunk['node_port']
+                            )
+                            if success:
+                                deleted_count += 1
+                            else:
+                                failed_count += 1
+                        
+                        # Delete from replica nodes
+                        for replica in chunk.get('replica_nodes', []):
+                            if replica['node_host'] and replica['node_port']:
+                                print(f"[gRPC] Deleting chunk {chunk_id} from replica node {replica['node_id']}")
+                                self._delete_chunk_from_node(
+                                    chunk_id,
+                                    replica['node_id'],
+                                    replica['node_host'],
+                                    replica['node_port']
+                                )
+                    
+                    print(f"[gRPC] Chunk cleanup complete: {deleted_count} deleted, {failed_count} failed")
+                    
+                    if failed_count > 0:
+                        message += f" (Warning: {failed_count} chunks failed to delete from nodes)"
+                else:
+                    print(f"[gRPC] Soft delete - chunks remain on nodes")
                 
                 emit_event(
                     'FILE_DELETED',
@@ -528,23 +610,11 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
         
         except Exception as e:
             print(f"[ERROR] Delete file failed: {e}")
+            import traceback
+            traceback.print_exc()
             context.abort(grpc.StatusCode.INTERNAL, str(e))
-    
-    def _delete_chunk_from_nodes(self, chunk_id):
-        """Delete chunk from storage nodes"""
-        try:
-            node_info, error = chunk_distributor.get_node_for_retrieval(chunk_id)
-            if error:
-                return
-            
-            channel = grpc.insecure_channel(f"{node_info['host']}:{node_info['port']}")
-            stub = cloud_storage_pb2_grpc.NodeServiceStub(channel)
-            
-            stub.DeleteChunk(cloud_storage_pb2.DeleteChunkRequest(chunk_id=chunk_id))
-            channel.close()
-        
-        except Exception as e:
-            print(f"[ERROR] Failed to delete chunk: {e}")
+
+
     
     def GetFilemetadatas(self, request, context):
         """Get file metadata"""
