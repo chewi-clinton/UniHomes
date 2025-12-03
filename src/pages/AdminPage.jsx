@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { adminAPI } from "../services/api";
 import { toast } from "sonner";
 import {
@@ -16,9 +17,11 @@ import {
   WifiOff,
   RefreshCw,
   LogOut,
+  Settings,
 } from "lucide-react";
 
 const AdminPage = () => {
+  const navigate = useNavigate();
   const [status, setStatus] = useState(null);
   const [users, setUsers] = useState([]);
   const [nodes, setNodes] = useState([]);
@@ -243,6 +246,13 @@ const AdminPage = () => {
         </div>
         <div className="flex items-center space-x-3">
           <button
+            onClick={() => navigate("/admin/nodes")}
+            className="flex items-center px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors"
+          >
+            <Settings className="w-4 h-4 mr-2" />
+            Manage Nodes
+          </button>
+          <button
             onClick={loadAdminData}
             className="flex items-center px-4 py-2 bg-accent hover:bg-accent/80 rounded-lg transition-colors"
           >
@@ -357,18 +367,33 @@ const AdminPage = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Storage Nodes */}
         <div className="bg-card border rounded-lg p-6">
-          <h3 className="font-medium mb-4">Storage Nodes</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-medium">Storage Nodes</h3>
+            <button
+              onClick={() => navigate("/admin/nodes")}
+              className="text-xs px-3 py-1 bg-primary text-primary-foreground hover:bg-primary/90 rounded transition-colors"
+            >
+              View All
+            </button>
+          </div>
           <div className="space-y-3">
             {nodes.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <HardDrive className="w-8 h-8 mx-auto mb-2 opacity-50" />
                 <p>No storage nodes registered</p>
+                <button
+                  onClick={() => navigate("/admin/nodes")}
+                  className="mt-3 text-sm text-primary hover:underline"
+                >
+                  Create your first node
+                </button>
               </div>
             ) : (
-              nodes.map((node) => (
+              nodes.slice(0, 4).map((node) => (
                 <div
                   key={node.node_id}
-                  className="flex items-center justify-between p-3 bg-accent rounded-lg"
+                  className="flex items-center justify-between p-3 bg-accent rounded-lg cursor-pointer hover:bg-accent/80 transition-colors"
+                  onClick={() => navigate("/admin/nodes")}
                 >
                   <div className="flex items-center space-x-3">
                     <div
@@ -402,6 +427,14 @@ const AdminPage = () => {
                   </div>
                 </div>
               ))
+            )}
+            {nodes.length > 4 && (
+              <button
+                onClick={() => navigate("/admin/nodes")}
+                className="w-full text-center text-sm text-primary hover:underline py-2"
+              >
+                View all {nodes.length} nodes
+              </button>
             )}
           </div>
         </div>

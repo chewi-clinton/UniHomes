@@ -6,10 +6,10 @@ import DashboardPage from "./pages/DashboardPage";
 import StoragePage from "./pages/StoragePage";
 import AdminPage from "./pages/AdminPage";
 import AdminAuthPage from "./pages/AdminAuthPage";
+import AdminNodeManagerPage from "./pages/AdminNodeManagerPage"; // Add this line
 import NotFoundPage from "./pages/NotFoundPage";
 import Layout from "./components/Layout";
 import LoadingSpinner from "./components/LoadingSpinner";
-
 // Protected Route Component for regular users
 const ProtectedRoute = () => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -70,6 +70,7 @@ function App() {
         <Route element={<AdminProtectedRoute />}>
           <Route element={<AdminLayout />}>
             <Route path="/admin" element={<AdminPage />} />
+            <Route path="/admin/nodes" element={<AdminNodeManagerPage />} />
           </Route>
         </Route>
 
