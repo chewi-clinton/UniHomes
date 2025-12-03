@@ -53,7 +53,6 @@ const StoragePage = () => {
       const storageResponse = await storageAPI.getStorageInfo();
       if (storageResponse.data.success) {
         const data = storageResponse.data.data;
-        // Map backend property names to frontend expected names
         setStorageInfo({
           allocated: data.allocated_bytes || data.allocated || 0,
           used: data.used_bytes || data.used || 0,
@@ -65,7 +64,6 @@ const StoragePage = () => {
       const filesResponse = await filesAPI.listFiles();
       if (filesResponse.data.success) {
         const responseData = filesResponse.data.data;
-        // Handle both array and object responses
         let files = [];
 
         if (Array.isArray(responseData)) {
@@ -74,7 +72,6 @@ const StoragePage = () => {
           files = responseData.files;
         }
 
-        // Normalize file objects to ensure consistent property names
         const normalizedFiles = files.map((file) => ({
           id: file.file_id || file.id,
           name: file.filename || file.name,
@@ -139,12 +136,25 @@ const StoragePage = () => {
     setFileStats(Object.values(stats).filter((stat) => stat.count > 0));
   };
 
+  // Convert bytes to MB for better chart readability
+  const convertToMB = (bytes) => {
+    return (bytes / (1024 * 1024)).toFixed(2);
+  };
+
   const pieChartData = storageInfo
     ? [
         { name: "Used", value: storageInfo.used },
         { name: "Free", value: storageInfo.allocated - storageInfo.used },
       ]
     : [];
+
+  // Convert file stats to MB for the bar chart
+  const fileStatsInMB = fileStats.map((stat) => ({
+    name: stat.name,
+    sizeMB: parseFloat(convertToMB(stat.size)),
+    count: stat.count,
+    sizeBytes: stat.size,
+  }));
 
   const getFileTypeIcon = (type) => {
     switch (type) {
@@ -161,6 +171,24 @@ const StoragePage = () => {
       default:
         return <File className="w-5 h-5" />;
     }
+  };
+
+  // Custom tooltip for the bar chart
+  const CustomTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-popover border rounded-lg p-3 shadow-lg">
+          <p className="font-medium">{payload[0].payload.name}</p>
+          <p className="text-sm text-muted-foreground">
+            Size: {formatFileSize(payload[0].payload.sizeBytes)}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Files: {payload[0].payload.count}
+          </p>
+        </div>
+      );
+    }
+    return null;
   };
 
   if (loading) {
@@ -261,21 +289,27 @@ const StoragePage = () => {
           </div>
         </div>
 
-        {/* File Types Bar Chart */}
+        {/* File Types Bar Chart - Now in MB */}
         <div className="bg-card border rounded-lg p-6">
-          <h3 className="font-medium mb-4">File Types</h3>
+          <h3 className="font-medium mb-4">File Types (MB)</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={fileStats}
+                data={fileStatsInMB}
                 margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
               >
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip formatter={(value) => formatFileSize(value)} />
+                <YAxis
+                  label={{
+                    value: "Size (MB)",
+                    angle: -90,
+                    position: "insideLeft",
+                  }}
+                />
+                <Tooltip content={<CustomTooltip />} />
                 <Legend />
-                <Bar dataKey="size" fill="#3b82f6" name="Size" />
+                <Bar dataKey="sizeMB" fill="#3b82f6" name="Size (MB)" />
               </BarChart>
             </ResponsiveContainer>
           </div>
