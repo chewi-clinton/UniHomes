@@ -24,7 +24,9 @@ const AdminPage = () => {
   const [nodes, setNodes] = useState([]);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [eventStreamStatus, setEventStreamStatus] = useState("connecting");
   const eventSourceRef = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
   const adminKey = sessionStorage.getItem("adminKey");
 
   useEffect(() => {
@@ -38,6 +40,9 @@ const AdminPage = () => {
     return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
       }
     };
   }, []);
@@ -73,25 +78,68 @@ const AdminPage = () => {
 
   const connectToEvents = () => {
     try {
-      eventSourceRef.current = adminAPI.getEvents(adminKey);
+      console.log("[SSE] Connecting to event stream...");
+      setEventStreamStatus("connecting");
 
-      eventSourceRef.current.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        setEvents((prev) => [data, ...prev].slice(0, 50)); // Keep last 50 events
+      // Close existing connection if any
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+
+      // Create new EventSource connection
+      const eventSource = new EventSource(
+        `/api/admin/events?admin_key=${encodeURIComponent(adminKey)}`
+      );
+
+      eventSourceRef.current = eventSource;
+
+      eventSource.onopen = () => {
+        console.log("[SSE] Connection opened");
+        setEventStreamStatus("connected");
+        toast.success("Event stream connected");
       };
 
-      eventSourceRef.current.onerror = (error) => {
-        console.error("SSE error:", error);
-        // Attempt to reconnect after 5 seconds
-        setTimeout(() => {
-          if (eventSourceRef.current) {
-            eventSourceRef.current.close();
-            connectToEvents();
+      eventSource.onmessage = (event) => {
+        console.log("[SSE] Message received:", event.data);
+        try {
+          const data = JSON.parse(event.data);
+
+          // Check if it's an error message
+          if (data.error) {
+            console.error("[SSE] Server error:", data.error);
+            setEventStreamStatus("error");
+            return;
           }
+
+          // Add timestamp if not present
+          if (!data.timestamp) {
+            data.timestamp = new Date().toISOString();
+          }
+
+          setEvents((prev) => [data, ...prev].slice(0, 50));
+          setEventStreamStatus("connected");
+        } catch (err) {
+          console.error("[SSE] Failed to parse event data:", err);
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        console.error("[SSE] Connection error:", error);
+        setEventStreamStatus("error");
+
+        // Close the connection
+        eventSource.close();
+
+        // Attempt to reconnect after 5 seconds
+        console.log("[SSE] Reconnecting in 5 seconds...");
+        reconnectTimeoutRef.current = setTimeout(() => {
+          console.log("[SSE] Attempting to reconnect...");
+          connectToEvents();
         }, 5000);
       };
     } catch (error) {
-      console.error("Failed to connect to events:", error);
+      console.error("[SSE] Failed to connect to events:", error);
+      setEventStreamStatus("error");
     }
   };
 
@@ -120,7 +168,11 @@ const AdminPage = () => {
   };
 
   const formatEventTime = (timestamp) => {
-    return new Date(timestamp).toLocaleTimeString();
+    try {
+      return new Date(timestamp).toLocaleTimeString();
+    } catch (e) {
+      return "Unknown time";
+    }
   };
 
   const getEventIcon = (type) => {
@@ -135,6 +187,34 @@ const AdminPage = () => {
       OTP_VERIFIED: <CheckCircle className="w-4 h-4" />,
     };
     return iconMap[type] || <Activity className="w-4 h-4" />;
+  };
+
+  const getEventStreamStatusBadge = () => {
+    switch (eventStreamStatus) {
+      case "connected":
+        return (
+          <span className="flex items-center text-xs text-green-600">
+            <span className="w-2 h-2 bg-green-500 rounded-full mr-1 animate-pulse"></span>
+            Connected
+          </span>
+        );
+      case "connecting":
+        return (
+          <span className="flex items-center text-xs text-yellow-600">
+            <span className="w-2 h-2 bg-yellow-500 rounded-full mr-1 animate-pulse"></span>
+            Connecting...
+          </span>
+        );
+      case "error":
+        return (
+          <span className="flex items-center text-xs text-red-600">
+            <span className="w-2 h-2 bg-red-500 rounded-full mr-1"></span>
+            Disconnected
+          </span>
+        );
+      default:
+        return null;
+    }
   };
 
   if (loading) {
@@ -372,15 +452,29 @@ const AdminPage = () => {
       {/* Real-time Events */}
       <div className="bg-card border rounded-lg p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-medium">Real-time Events</h3>
-          <Activity className="w-5 h-5 text-muted-foreground animate-pulse" />
+          <div className="flex items-center space-x-3">
+            <h3 className="font-medium">Real-time Events</h3>
+            {getEventStreamStatusBadge()}
+          </div>
+          <button
+            onClick={connectToEvents}
+            className="text-xs px-3 py-1 bg-accent hover:bg-accent/80 rounded transition-colors"
+          >
+            Reconnect
+          </button>
         </div>
 
         <div className="space-y-2 max-h-96 overflow-y-auto custom-scrollbar">
           {events.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Activity className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p>Waiting for events...</p>
+              <p>
+                {eventStreamStatus === "connected"
+                  ? "Waiting for events..."
+                  : eventStreamStatus === "connecting"
+                  ? "Connecting to event stream..."
+                  : "Connection error. Click reconnect to retry."}
+              </p>
             </div>
           ) : (
             events.map((event, index) => (
