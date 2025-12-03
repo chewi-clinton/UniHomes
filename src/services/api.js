@@ -93,7 +93,7 @@ export const filesAPI = {
     });
   },
 
-  deleteFile: (fileId, permanent = false) =>
+  deleteFile: (fileId, permanent = true) =>
     api.delete(`/files/${fileId}`, { params: { permanent } }),
 
   createFolder: (name, parentFolderId) =>
