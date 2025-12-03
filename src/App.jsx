@@ -1,49 +1,50 @@
-import React from 'react'
-import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
-import { useAuth } from './contexts/AuthContext'
-import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
-import StoragePage from './pages/StoragePage'
-import AdminPage from './pages/AdminPage'
-import NotFoundPage from './pages/NotFoundPage'
-import Layout from './components/Layout'
-import LoadingSpinner from './components/LoadingSpinner'
+import React from "react";
+import { Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { useAuth } from "./contexts/AuthContext";
+import LoginPage from "./pages/LoginPage";
+import DashboardPage from "./pages/DashboardPage";
+import StoragePage from "./pages/StoragePage";
+import AdminPage from "./pages/AdminPage";
+import AdminAuthPage from "./pages/AdminAuthPage";
+import NotFoundPage from "./pages/NotFoundPage";
+import Layout from "./components/Layout";
+import LoadingSpinner from "./components/LoadingSpinner";
 
-// Protected Route Component
+// Protected Route Component for regular users
 const ProtectedRoute = () => {
-  const { isAuthenticated, isLoading } = useAuth()
-  
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner />
-      </div>
-    )
-  }
-  
-  return isAuthenticated ? <Outlet /> : <Navigate to="/login" />
-}
+  const { isAuthenticated, isLoading } = useAuth();
 
-// Admin Route Component
-const AdminRoute = () => {
-  const { user, isAuthenticated, isLoading } = useAuth()
-  
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <LoadingSpinner />
       </div>
-    )
+    );
   }
-  
-  const isAdmin = user && (
-    user.email === 'admin@clouddrive.com' || 
-    user.role === 'admin' ||
-    (user.email && ['admin@clouddrive.com'].includes(user.email))
-  )
-  
-  return isAuthenticated && isAdmin ? <Outlet /> : <Navigate to="/dashboard" />
-}
+
+  return isAuthenticated ? <Outlet /> : <Navigate to="/login" />;
+};
+
+// Admin Protected Route Component - standalone, doesn't need user auth
+const AdminProtectedRoute = () => {
+  const adminKey = sessionStorage.getItem("adminKey");
+
+  // If no admin key, redirect to admin auth page
+  if (!adminKey) {
+    return <Navigate to="/admin/auth" replace />;
+  }
+
+  return <Outlet />;
+};
+
+// Simple Admin Layout (without user auth requirements)
+const AdminLayout = () => {
+  return (
+    <div className="min-h-screen">
+      <Outlet />
+    </div>
+  );
+};
 
 function App() {
   return (
@@ -52,29 +53,34 @@ function App() {
         {/* Public Routes */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/enroll" element={<LoginPage isEnroll={true} />} />
-        
-        {/* Protected Routes */}
+
+        {/* Admin Authentication Route (public - but checks for existing auth) */}
+        <Route path="/admin/auth" element={<AdminAuthPage />} />
+
+        {/* Protected User Routes */}
         <Route element={<ProtectedRoute />}>
           <Route element={<Layout />}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/dashboard/:folderId" element={<DashboardPage />} />
             <Route path="/storage" element={<StoragePage />} />
-            
-            {/* Admin Routes */}
-            <Route element={<AdminRoute />}>
-              <Route path="/admin" element={<AdminPage />} />
-            </Route>
           </Route>
         </Route>
-        
-        {/* Redirects */}
+
+        {/* Admin Routes - separate from user auth */}
+        <Route element={<AdminProtectedRoute />}>
+          <Route element={<AdminLayout />}>
+            <Route path="/admin" element={<AdminPage />} />
+          </Route>
+        </Route>
+
+        {/* Default redirect */}
         <Route path="/" element={<Navigate to="/dashboard" />} />
-        
-        {/* 404 Page */}
+
+        {/* 404 */}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;

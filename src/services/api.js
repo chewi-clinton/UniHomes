@@ -32,9 +32,12 @@ api.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem("auth_token");
-      localStorage.removeItem("user");
-      window.location.href = "/login";
+      // Check if it's not an admin route
+      if (!error.config.url.includes("/admin/")) {
+        localStorage.removeItem("auth_token");
+        localStorage.removeItem("user");
+        window.location.href = "/login";
+      }
     }
     return Promise.reject(error);
   }
@@ -120,17 +123,61 @@ export const storageAPI = {
 
 // Admin API
 export const adminAPI = {
-  getStatus: () => api.get("/admin/status"),
-  getUsers: () => api.get("/admin/users"),
-  getNodes: () => api.get("/admin/nodes"),
-  getEvents: () => {
-    const token = localStorage.getItem("auth_token");
-    return new EventSource(`${API_BASE_URL}/admin/events`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+  // Verify admin key
+  verifyAdminKey: (adminKey) =>
+    api.post("/admin/verify", { admin_key: adminKey }),
+
+  // Get system status
+  getStatus: (adminKey) =>
+    api.get("/admin/status", {
+      headers: { "X-Admin-Key": adminKey },
+    }),
+
+  // List all users
+  getUsers: (adminKey) =>
+    api.get("/admin/users", {
+      headers: { "X-Admin-Key": adminKey },
+    }),
+
+  // List all storage nodes
+  getNodes: (adminKey) =>
+    api.get("/admin/nodes", {
+      headers: { "X-Admin-Key": adminKey },
+    }),
+
+  // Get user details
+  getUserDetails: (adminKey, userId) =>
+    api.get(`/admin/users/${userId}`, {
+      headers: { "X-Admin-Key": adminKey },
+    }),
+
+  // Stream system events (Server-Sent Events)
+  getEvents: (adminKey) => {
+    return new EventSource(
+      `${API_BASE_URL}/admin/events?admin_key=${adminKey}`
+    );
   },
+
+  // Node management
+  createNode: (adminKey, nodeData) =>
+    api.post("/admin/nodes", nodeData, {
+      headers: { "X-Admin-Key": adminKey },
+    }),
+
+  startNode: (adminKey, nodeId, nodeData) =>
+    api.post(`/admin/nodes/${nodeId}/start`, nodeData, {
+      headers: { "X-Admin-Key": adminKey },
+    }),
+
+  stopNode: (adminKey, nodeId) =>
+    api.post(`/admin/nodes/${nodeId}/stop`, null, {
+      headers: { "X-Admin-Key": adminKey },
+    }),
+
+  deleteNode: (adminKey, nodeId) =>
+    api.delete(`/admin/nodes/${nodeId}`, {
+      headers: { "X-Admin-Key": adminKey },
+    }),
 };
 
 export default api;
