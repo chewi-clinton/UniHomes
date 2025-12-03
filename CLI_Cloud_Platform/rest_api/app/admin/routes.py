@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, Response
+from flask import Blueprint, request, jsonify, Response, current_app
 from app.utils.grpc_client import get_grpc_client
 from app.models.response import success_response, error_response
 import generated.cloud_storage_pb2 as cloud_storage_pb2
@@ -8,95 +8,78 @@ import subprocess
 import os
 import sys
 import time
+from datetime import datetime
 
 admin_bp = Blueprint('admin', __name__)
 
-# Node management functions
-def start_node(node_id, host, port, storage_gb):
-    """Start a storage node as a subprocess"""
-    try:
-        # Path to storage_node.py
-        storage_node_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            'storage_node.py'
-        )
-        
-        # Start the node as a subprocess
-        cmd = [
-            sys.executable, 
-            storage_node_path,
-            node_id, host, str(port), str(storage_gb)
-        ]
-        
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        
-        # Wait a bit to see if it starts successfully
-        time.sleep(2)
-        
-        if process.poll() is None:
-            return True, f"Node {node_id} started successfully"
-        else:
-            _, stderr = process.communicate()
-            return False, f"Failed to start node: {stderr.decode('utf-8')}"
-    except Exception as e:
-        return False, f"Error starting node: {str(e)}"
+# Helper function to verify admin key
+def verify_admin_key(request):
+    """Verify admin key from request headers or body"""
+    admin_key = request.headers.get('X-Admin-Key')
+    if not admin_key:
+        # Try to get from request body for POST requests
+        data = request.get_json(silent=True)
+        if data:
+            admin_key = data.get('admin_key')
+    
+    expected_key = current_app.config.get('ADMIN_KEY')
+    if not expected_key:
+        return False, "Admin key not configured"
+    
+    # Strip whitespace from both keys before comparing
+    if admin_key and expected_key:
+        admin_key = admin_key.strip()
+        expected_key = expected_key.strip()
+    
+    if admin_key != expected_key:
+        return False, "Invalid admin key"
+    
+    return True, "Valid"
 
-def stop_node(node_id):
-    """Stop a storage node by finding and killing its process"""
-    try:
-        # Find the process by node_id
-        cmd = f"ps aux | grep 'storage_node.py {node_id}' | grep -v grep | awk '{{print $2}}'"
-        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        pid, _ = process.communicate()
-        
-        if pid:
-            # Kill the process
-            os.kill(int(pid.strip()), 15)  # SIGTERM
-            return True, f"Node {node_id} stopped successfully"
-        else:
-            return False, f"Node {node_id} not found"
-    except Exception as e:
-        return False, f"Error stopping node: {str(e)}"
+# ============================================================================
+# Admin Authentication
+# ============================================================================
 
-def delete_node(node_id):
-    """Delete a node from the database"""
-    try:
-        # Connect to the database directly
-        from sqlalchemy import create_engine
-        from sqlalchemy.orm import sessionmaker
-        
-        db_url = f"postgresql://{os.getenv('DB_USER', 'postgres')}:{os.getenv('DB_PASSWORD', 'postgres')}@{os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '5432')}/{os.getenv('DB_NAME', 'cloud_storage')}"
-        engine = create_engine(db_url)
-        Session = sessionmaker(bind=engine)
-        session = Session()
-        
-        # Import the model
-        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-        from db.models import StorageNode
-        
-        # Find and delete the node
-        node = session.query(StorageNode).filter_by(node_id=node_id).first()
-        if node:
-            session.delete(node)
-            session.commit()
-            session.close()
-            return True, f"Node {node_id} deleted from database"
-        else:
-            session.close()
-            return False, f"Node {node_id} not found in database"
-    except Exception as e:
-        return False, f"Error deleting node: {str(e)}"
+@admin_bp.route('/verify', methods=['POST'])
+def verify_admin():
+    """Verify admin key"""
+    data = request.get_json()
+    admin_key = data.get('admin_key')
+    
+    if not admin_key:
+        return error_response("Admin key is required"), 400
+    
+    # Verify against configured admin key
+    expected_key = current_app.config.get('ADMIN_KEY')
+    
+    if not expected_key:
+        return error_response("Admin authentication not configured"), 500
+    
+    # Strip whitespace before comparison
+    if admin_key.strip() == expected_key.strip():
+        return success_response({
+            'verified': True
+        }, message='Admin key verified successfully')
+    else:
+        return error_response("Invalid admin key"), 401
+
+# ============================================================================
+# System Status & Monitoring
+# ============================================================================
 
 @admin_bp.route('/status', methods=['GET'])
 def get_system_status():
-    admin_key = request.headers.get('X-Admin-Key')
-    if admin_key != request.app.config['ADMIN_KEY']:
-        return error_response("Invalid admin key"), 401
+    """Get system status"""
+    is_valid, message = verify_admin_key(request)
+    if not is_valid:
+        return error_response(message), 401
     
+    admin_key = request.headers.get('X-Admin-Key')
     client = get_grpc_client()
+    
     try:
         response = client.admin_stub.GetSystemStatus(
-            cloud_storage_pb2.SystemStatusRequest(admin_key=admin_key)
+            cloud_storage_pb2.SystemStatusRequest(admin_key=admin_key.strip())
         )
         
         if response.success:
@@ -114,20 +97,80 @@ def get_system_status():
         else:
             return error_response("Failed to get system status"), 400
     except grpc.RpcError as e:
+        print(f"[ERROR] gRPC error in get_system_status: {e.details()}")
         return error_response(f"gRPC error: {e.details()}"), 500
     except Exception as e:
+        print(f"[ERROR] Exception in get_system_status: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return error_response(f"Failed to get system status: {str(e)}"), 500
+
+@admin_bp.route('/events', methods=['GET'])
+def stream_events():
+    """Stream system events (Server-Sent Events)"""
+    admin_key = request.args.get('admin_key')
+    
+    if not admin_key:
+        return error_response("Admin key is required"), 401
+    
+    expected_key = current_app.config.get('ADMIN_KEY')
+    
+    # Strip whitespace and compare
+    if not expected_key or admin_key.strip() != expected_key.strip():
+        print(f"[EVENTS] Auth failed - received: '{admin_key}' expected: '{expected_key}'")
+        return error_response("Invalid admin key"), 401
+    
+    print(f"[EVENTS] Starting SSE stream for admin")
+    client = get_grpc_client()
+    
+    def event_stream():
+        try:
+            # Send initial connection message
+            yield f"data: {json.dumps({'event_type': 'CONNECTED', 'message': 'Event stream connected', 'timestamp': datetime.now().isoformat()})}\n\n"
+            
+            stream_request = cloud_storage_pb2.StreamEventsRequest(admin_key=admin_key.strip())
+            for event in client.admin_stub.StreamSystemEvents(stream_request):
+                data = {
+                    'event_type': event.event_type,
+                    'timestamp': event.timestamp,
+                    'message': event.message,
+                    'user_id': event.user_id,
+                    'details': event.details
+                }
+                print(f"[EVENTS] Sending event: {event.event_type}")
+                yield f"data: {json.dumps(data)}\n\n"
+        except grpc.RpcError as e:
+            print(f"[ERROR] SSE gRPC error: {e.details()}")
+            yield f"data: {json.dumps({'error': e.details()})}\n\n"
+        except Exception as e:
+            print(f"[ERROR] SSE exception: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+    
+    response = Response(event_stream(), mimetype="text/event-stream")
+    response.headers['Cache-Control'] = 'no-cache'
+    response.headers['X-Accel-Buffering'] = 'no'
+    response.headers['Connection'] = 'keep-alive'
+    return response
+
+# ============================================================================
+# User Management
+# ============================================================================
 
 @admin_bp.route('/users', methods=['GET'])
 def list_users():
-    admin_key = request.headers.get('X-Admin-Key')
-    if admin_key != request.app.config['ADMIN_KEY']:
-        return error_response("Invalid admin key"), 401
+    """List all users"""
+    is_valid, message = verify_admin_key(request)
+    if not is_valid:
+        return error_response(message), 401
     
+    admin_key = request.headers.get('X-Admin-Key')
     client = get_grpc_client()
+    
     try:
         response = client.admin_stub.ListAllUsers(
-            cloud_storage_pb2.ListUsersRequest(admin_key=admin_key)
+            cloud_storage_pb2.ListUsersRequest(admin_key=admin_key.strip())
         )
         
         if response.success:
@@ -146,21 +189,89 @@ def list_users():
         else:
             return error_response("Failed to list users"), 400
     except grpc.RpcError as e:
+        print(f"[ERROR] gRPC error in list_users: {e.details()}")
         return error_response(f"gRPC error: {e.details()}"), 500
     except Exception as e:
+        print(f"[ERROR] Exception in list_users: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return error_response(f"Failed to list users: {str(e)}"), 500
+
+@admin_bp.route('/users/<user_id>', methods=['GET'])
+def get_user_details(user_id):
+    """Get detailed information about a specific user"""
+    is_valid, message = verify_admin_key(request)
+    if not is_valid:
+        return error_response(message), 401
+    
+    admin_key = request.headers.get('X-Admin-Key')
+    client = get_grpc_client()
+    
+    try:
+        response = client.admin_stub.GetUserDetails(
+            cloud_storage_pb2.UserDetailsRequest(
+                admin_key=admin_key.strip(),
+                user_id=user_id
+            )
+        )
+        
+        if response.success:
+            user_data = {
+                'user_id': response.user.user_id,
+                'email': response.user.email,
+                'name': response.user.name,
+                'storage_allocated': response.user.storage_allocated,
+                'storage_used': response.user.storage_used,
+                'created_at': response.user.created_at,
+                'last_login': response.user.last_login,
+                'file_count': response.user.file_count
+            }
+            
+            files = [{
+                'file_id': f.file_id,
+                'filename': f.filename,
+                'file_size': f.file_size,
+                'mime_type': f.mime_type,
+                'created_at': f.created_at,
+                'modified_at': f.modified_at
+            } for f in response.files]
+            
+            return success_response({
+                'user': user_data,
+                'files': files
+            })
+        else:
+            return error_response("User not found"), 404
+    except grpc.RpcError as e:
+        print(f"[ERROR] gRPC error in get_user_details: {e.details()}")
+        return error_response(f"gRPC error: {e.details()}"), 500
+    except Exception as e:
+        print(f"[ERROR] Exception in get_user_details: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return error_response(f"Failed to get user details: {str(e)}"), 500
+
+# ============================================================================
+# Node Management
+# ============================================================================
 
 @admin_bp.route('/nodes', methods=['GET'])
 def list_nodes():
-    admin_key = request.headers.get('X-Admin-Key')
-    if admin_key != request.app.config['ADMIN_KEY']:
-        return error_response("Invalid admin key"), 401
+    """List all storage nodes"""
+    is_valid, message = verify_admin_key(request)
+    if not is_valid:
+        return error_response(message), 401
     
+    admin_key = request.headers.get('X-Admin-Key')
     client = get_grpc_client()
+    
     try:
+        print(f"[NODES] Calling ListAllNodes with admin_key")
         response = client.admin_stub.ListAllNodes(
-            cloud_storage_pb2.ListNodesRequest(admin_key=admin_key)
+            cloud_storage_pb2.ListNodesRequest(admin_key=admin_key.strip())
         )
+        
+        print(f"[NODES] Response received: success={response.success}")
         
         if response.success:
             nodes = [{
@@ -175,45 +286,28 @@ def list_nodes():
                 'health_score': n.health_score
             } for n in response.nodes]
             
+            print(f"[NODES] Returning {len(nodes)} nodes")
             return success_response({'nodes': nodes})
         else:
+            print(f"[NODES] Failed to list nodes")
             return error_response("Failed to list nodes"), 400
     except grpc.RpcError as e:
+        print(f"[ERROR] gRPC error in list_nodes: {e.details()}")
+        import traceback
+        traceback.print_exc()
         return error_response(f"gRPC error: {e.details()}"), 500
     except Exception as e:
+        print(f"[ERROR] Exception in list_nodes: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return error_response(f"Failed to list nodes: {str(e)}"), 500
 
-@admin_bp.route('/events', methods=['GET'])
-def stream_events():
-    admin_key = request.args.get('admin_key')
-    if admin_key != request.app.config['ADMIN_KEY']:
-        return error_response("Invalid admin key"), 401
-    
-    client = get_grpc_client()
-    
-    def event_stream():
-        try:
-            request = cloud_storage_pb2.StreamEventsRequest(admin_key=admin_key)
-            for event in client.admin_stub.StreamSystemEvents(request):
-                data = {
-                    'event_type': event.event_type,
-                    'timestamp': event.timestamp,
-                    'message': event.message,
-                    'user_id': event.user_id,
-                    'details': event.details
-                }
-                yield f"data: {json.dumps(data)}\n\n"
-        except grpc.RpcError as e:
-            yield f"data: {json.dumps({'error': e.details()})}\n\n"
-    
-    return Response(event_stream(), mimetype="text/event-stream")
-
-# Node management endpoints
 @admin_bp.route('/nodes', methods=['POST'])
 def create_node():
-    admin_key = request.headers.get('X-Admin-Key')
-    if admin_key != request.app.config['ADMIN_KEY']:
-        return error_response("Invalid admin key"), 401
+    """Create and start a new storage node"""
+    is_valid, message = verify_admin_key(request)
+    if not is_valid:
+        return error_response(message), 401
     
     data = request.get_json()
     node_id = data.get('node_id')
@@ -222,61 +316,33 @@ def create_node():
     storage_gb = data.get('storage_gb')
     
     if not all([node_id, host, port, storage_gb]):
-        return error_response("Missing required fields"), 400
+        return error_response("Missing required fields: node_id, host, port, storage_gb"), 400
     
-    # Start the node
-    success, message = start_node(node_id, host, port, storage_gb)
-    if not success:
-        return error_response(message), 500
-    
-    return success_response(message=message)
+    return success_response(message="Node management not implemented yet"), 501
 
 @admin_bp.route('/nodes/<node_id>/start', methods=['POST'])
 def start_node_endpoint(node_id):
-    admin_key = request.headers.get('X-Admin-Key')
-    if admin_key != request.app.config['ADMIN_KEY']:
-        return error_response("Invalid admin key"), 401
+    """Start a storage node"""
+    is_valid, message = verify_admin_key(request)
+    if not is_valid:
+        return error_response(message), 401
     
-    data = request.get_json()
-    host = data.get('host')
-    port = data.get('port')
-    storage_gb = data.get('storage_gb')
-    
-    if not all([host, port, storage_gb]):
-        return error_response("Missing required fields"), 400
-    
-    # Start the node
-    success, message = start_node(node_id, host, port, storage_gb)
-    if not success:
-        return error_response(message), 500
-    
-    return success_response(message=message)
+    return success_response(message="Node management not implemented yet"), 501
 
 @admin_bp.route('/nodes/<node_id>/stop', methods=['POST'])
 def stop_node_endpoint(node_id):
-    admin_key = request.headers.get('X-Admin-Key')
-    if admin_key != request.app.config['ADMIN_KEY']:
-        return error_response("Invalid admin key"), 401
+    """Stop a storage node"""
+    is_valid, message = verify_admin_key(request)
+    if not is_valid:
+        return error_response(message), 401
     
-    # Stop the node
-    success, message = stop_node(node_id)
-    if not success:
-        return error_response(message), 500
-    
-    return success_response(message=message)
+    return success_response(message="Node management not implemented yet"), 501
 
 @admin_bp.route('/nodes/<node_id>', methods=['DELETE'])
 def delete_node_endpoint(node_id):
-    admin_key = request.headers.get('X-Admin-Key')
-    if admin_key != request.app.config['ADMIN_KEY']:
-        return error_response("Invalid admin key"), 401
+    """Delete a storage node"""
+    is_valid, message = verify_admin_key(request)
+    if not is_valid:
+        return error_response(message), 401
     
-    # Stop the node first
-    stop_node(node_id)
-    
-    # Delete from database
-    success, message = delete_node(node_id)
-    if not success:
-        return error_response(message), 500
-    
-    return success_response(message=message)
+    return success_response(message="Node management not implemented yet"), 501

@@ -953,7 +953,7 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
             context.abort(grpc.StatusCode.INTERNAL, str(e))
     
     def ListAllNodes(self, request, context):
-        """List all storage nodes - NOW IMPLEMENTED"""
+   
         try:
             if request.admin_key != ADMIN_KEY:
                 context.abort(grpc.StatusCode.PERMISSION_DENIED, "Invalid admin key")
@@ -962,6 +962,8 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
                 from db.models import StorageNode, Chunk
                 
                 nodes = session.query(StorageNode).all()
+                
+                # FIXED: Make online_threshold timezone-aware to match database timestamps
                 online_threshold = get_utcnow() - timedelta(minutes=2)
                 
                 node_list = []
@@ -971,8 +973,18 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
                         primary_node_id=node.node_id
                     ).count()
                     
-                    # Determine online status
-                    is_online = node.last_heartbeat and node.last_heartbeat > online_threshold
+                    # FIXED: Determine online status with proper timezone handling
+                    is_online = False
+                    if node.last_heartbeat:
+                        # Make sure both datetimes have the same timezone awareness
+                        if node.last_heartbeat.tzinfo is None:
+                            # If database timestamp is naive, make threshold naive too
+                            threshold_naive = online_threshold.replace(tzinfo=None)
+                            is_online = node.last_heartbeat > threshold_naive
+                        else:
+                            # If database timestamp is aware, use aware threshold
+                            is_online = node.last_heartbeat > online_threshold
+                    
                     status = 'online' if is_online else 'offline'
                     
                     node_list.append(cloud_storage_pb2.NodeInfo(
@@ -994,61 +1006,62 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
         
         except Exception as e:
             print(f"[ERROR] List nodes failed: {e}")
+            import traceback
+            traceback.print_exc()
             context.abort(grpc.StatusCode.INTERNAL, str(e))
-    
-    def GetUserDetails(self, request, context):
-        """Get detailed user information - NOW IMPLEMENTED"""
-        try:
-            if request.admin_key != ADMIN_KEY:
-                context.abort(grpc.StatusCode.PERMISSION_DENIED, "Invalid admin key")
+        def GetUserDetails(self, request, context):
+            """Get detailed user information - NOW IMPLEMENTED"""
+            try:
+                if request.admin_key != ADMIN_KEY:
+                    context.abort(grpc.StatusCode.PERMISSION_DENIED, "Invalid admin key")
+                
+                user_id = request.user_id
+                
+                with get_db_session() as session:
+                    from db.models import User, File
+                    
+                    user = session.query(User).filter_by(user_id=user_id).first()
+                    
+                    if not user:
+                        context.abort(grpc.StatusCode.NOT_FOUND, "User not found")
+                    
+                    # Get user's files
+                    files = session.query(File).filter_by(
+                        user_id=user_id,
+                        deleted_at=None
+                    ).order_by(File.created_at.desc()).all()
+                    
+                    file_entries = []
+                    for file in files:
+                        file_entries.append(cloud_storage_pb2.FileEntry(
+                            file_id=file.file_id,
+                            filename=file.filename,
+                            file_size=file.file_size,
+                            mime_type=file.mime_type,
+                            created_at=file.created_at.isoformat(),
+                            modified_at=file.modified_at.isoformat(),
+                            is_shared=file.is_shared
+                        ))
+                    
+                    return cloud_storage_pb2.UserDetailsResponse(
+                        success=True,
+                        user=cloud_storage_pb2.UserInfo(
+                            user_id=user.user_id,
+                            email=user.email,
+                            name=user.name,
+                            storage_allocated=user.storage_allocated,
+                            storage_used=user.storage_used,
+                            created_at=user.created_at.isoformat(),
+                            last_login=user.last_login.isoformat() if user.last_login else "",
+                            file_count=len(files)
+                        ),
+                        files=file_entries
+                    )
             
-            user_id = request.user_id
-            
-            with get_db_session() as session:
-                from db.models import User, File
-                
-                user = session.query(User).filter_by(user_id=user_id).first()
-                
-                if not user:
-                    context.abort(grpc.StatusCode.NOT_FOUND, "User not found")
-                
-                # Get user's files
-                files = session.query(File).filter_by(
-                    user_id=user_id,
-                    deleted_at=None
-                ).order_by(File.created_at.desc()).all()
-                
-                file_entries = []
-                for file in files:
-                    file_entries.append(cloud_storage_pb2.FileEntry(
-                        file_id=file.file_id,
-                        filename=file.filename,
-                        file_size=file.file_size,
-                        mime_type=file.mime_type,
-                        created_at=file.created_at.isoformat(),
-                        modified_at=file.modified_at.isoformat(),
-                        is_shared=file.is_shared
-                    ))
-                
-                return cloud_storage_pb2.UserDetailsResponse(
-                    success=True,
-                    user=cloud_storage_pb2.UserInfo(
-                        user_id=user.user_id,
-                        email=user.email,
-                        name=user.name,
-                        storage_allocated=user.storage_allocated,
-                        storage_used=user.storage_used,
-                        created_at=user.created_at.isoformat(),
-                        last_login=user.last_login.isoformat() if user.last_login else "",
-                        file_count=len(files)
-                    ),
-                    files=file_entries
-                )
+            except Exception as e:
+                print(f"[ERROR] Get user details failed: {e}")
+                context.abort(grpc.StatusCode.INTERNAL, str(e))
         
-        except Exception as e:
-            print(f"[ERROR] Get user details failed: {e}")
-            context.abort(grpc.StatusCode.INTERNAL, str(e))
-    
     def StreamSystemEvents(self, request, context):
         """Stream real-time system events"""
         try:
@@ -1057,16 +1070,46 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
             
             print("[ADMIN] Event streaming started")
             
-            while True:
+            # Send a keepalive event every 60 seconds (reduced frequency)
+            last_keepalive = datetime.now()
+            keepalive_interval = timedelta(seconds=60)
+            
+            while context.is_active():
                 try:
-                    event = event_queue.get(timeout=1.0)
+                    # Try to get an event from the queue with longer timeout to reduce CPU usage
+                    event = event_queue.get(timeout=2.0)
+                    print(f"[ADMIN] Streaming event: {event.event_type}")
                     yield event
-                except:
-                    if not context.is_active():
-                        break
+                    last_keepalive = datetime.now()
+                    
+                except queue.Empty:
+                    # Queue is empty, check if we need to send keepalive
+                    now = datetime.now()
+                    if now - last_keepalive > keepalive_interval:
+                        # Send a keepalive event (suppress logging to reduce noise)
+                        keepalive = cloud_storage_pb2.SystemEvent(
+                            event_type='KEEPALIVE',
+                            timestamp=now.isoformat(),
+                            message='Connection active',
+                            user_id='',
+                            details=''
+                        )
+                        yield keepalive
+                        last_keepalive = now
+                    
+                    # Continue the loop
+                    continue
+                    
+                except Exception as e:
+                    print(f"[ERROR] Error reading from event queue: {e}")
+                    break
+            
+            print("[ADMIN] Event streaming ended")
         
         except Exception as e:
             print(f"[ERROR] Event stream failed: {e}")
+            import traceback
+            traceback.print_exc()
     
     def UpdateGlobalStorage(self, request, context):
         """Update global storage capacity"""

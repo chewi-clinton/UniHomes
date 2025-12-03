@@ -13,6 +13,9 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
     
+    # Initialize config and print debug info
+    config_class.init_app(app)
+    
     # Initialize extensions (including CORS)
     init_extensions(app)
     

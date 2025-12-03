@@ -1,4 +1,3 @@
-
 import smtplib
 import random
 import time
@@ -50,30 +49,32 @@ class OTPManager:
             msg['Subject'] = 'CloudGrpc - Your OTP Code'
             
             body = f"""
-            Hello,
-            
-            Your OTP for CloudGrpc authentication is: {otp}
-            
-            This OTP is valid for 5 minutes.
-            
-            If you did not request this OTP, please ignore this email.
-            
-            Best regards,
-            CloudGrpc Team
+Hello,
+
+Your OTP for CloudGrpc authentication is: {otp}
+
+This OTP is valid for 5 minutes.
+
+If you did not request this OTP, please ignore this email.
+
+Best regards,
+CloudGrpc Team
             """
             
             msg.attach(MIMEText(body, 'plain'))
             
-            # Send email via Gmail SMTP
-            server = smtplib.SMTP('smtp.gmail.com', 587)
-            server.starttls()
+            # Send email via Gmail SMTP using port 465 (SSL)
+            # Changed from port 587 (TLS) to port 465 (SSL) for macOS compatibility
+            server = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=30)
             server.login(self.gmail_user, self.gmail_password)
             server.send_message(msg)
             server.quit()
             
+            print(f"[EMAIL] OTP sent to {email}")
             return True, "OTP sent successfully to your email."
         
         except Exception as e:
+            print(f"[ERROR] Failed to send email: {e}")
             # Fallback to test mode if email fails
             otp = self.generate_otp()
             with self._lock:

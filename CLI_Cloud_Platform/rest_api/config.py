@@ -1,5 +1,11 @@
 import os
 from datetime import timedelta
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
+
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -21,3 +27,14 @@ class Config:
     DB_NAME = os.environ.get('DB_NAME', 'cloud_storage')
     DB_USER = os.environ.get('DB_USER', 'postgres')
     DB_PASSWORD = os.environ.get('DB_PASSWORD', 'postgres')
+    
+    @classmethod
+    def init_app(cls, app):
+        """Initialize app with config - print debug info"""
+        admin_key = app.config.get('ADMIN_KEY')
+        if admin_key:
+            print(f"[CONFIG] ✓ Admin Key Loaded: ***{admin_key[-4:]}")
+        else:
+            print(f"[CONFIG] ✗ Admin Key NOT LOADED!")
+        print(f"[CONFIG] gRPC Server: {app.config.get('GRPC_SERVER')}")
+        print(f"[CONFIG] Flask Env: {app.config.get('FLASK_ENV')}")
