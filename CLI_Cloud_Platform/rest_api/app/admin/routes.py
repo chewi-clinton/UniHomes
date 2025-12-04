@@ -1,5 +1,4 @@
-# app/routes/admin.py - COMPLETE FIXED VERSION
-# Replace the entire file with this version
+# app/routes/admin.py - COMPLETE SOLUTION WITH CAPACITY TRACKING
 
 from flask import Blueprint, request, jsonify, Response, current_app
 from app.utils.grpc_client import get_grpc_client
@@ -13,12 +12,11 @@ import sys
 import time
 import signal
 import psutil
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 admin_bp = Blueprint('admin', __name__)
 
-# FIXED: PID file directory should be in project root, not rest_api
 def get_project_root():
     """Get the project root directory"""
     cwd = Path(os.getcwd())
@@ -77,37 +75,28 @@ def is_process_running(pid):
 
 def find_node_process(node_id):
     """Find running node process by scanning all processes"""
-    print(f"[ADMIN] Searching for process with node_id: {node_id}")
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
             cmdline = proc.info['cmdline']
             if cmdline:
                 cmdline_str = ' '.join(cmdline)
-                if 'storage_node.py' in cmdline_str:
-                    if node_id in cmdline:
-                        print(f"[ADMIN] Found matching process - PID: {proc.info['pid']}, CMD: {cmdline_str}")
-                        return proc.info['pid']
+                if 'storage_node.py' in cmdline_str and node_id in cmdline:
+                    return proc.info['pid']
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
-    print(f"[ADMIN] No running process found for node_id: {node_id}")
     return None
 
 def kill_process(pid):
     """Kill a process gracefully, then forcefully if needed"""
     try:
         process = psutil.Process(pid)
-        print(f"[ADMIN] Terminating process {pid}...")
         process.terminate()
-        
         try:
             process.wait(timeout=5)
-            print(f"[ADMIN] Process {pid} terminated gracefully")
             return True
         except psutil.TimeoutExpired:
-            print(f"[ADMIN] Process {pid} didn't stop gracefully, forcing...")
             process.kill()
             process.wait()
-            print(f"[ADMIN] Process {pid} force killed")
             return True
     except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
         print(f"[ERROR] Failed to kill process {pid}: {e}")
@@ -133,6 +122,76 @@ def verify_admin_key(request):
         return False, "Invalid admin key"
     
     return True, "Valid"
+
+# ============================================================================
+# Capacity Calculation Utilities
+# ============================================================================
+
+def calculate_capacity_metrics():
+    """
+    Calculate storage capacity metrics:
+    - total_capacity: Sum of ALL nodes (including offline)
+    - usable_capacity: Sum of ONLINE nodes only
+    - used_capacity: Sum of storage_used from all nodes
+    """
+    from db.database import get_db_session
+    from db.models import StorageNode
+    
+    try:
+        with get_db_session() as session:
+            nodes = session.query(StorageNode).all()
+            
+            if not nodes:
+                return {
+                    'total_capacity': 0,
+                    'usable_capacity': 0,
+                    'used_capacity': 0,
+                    'total_nodes': 0,
+                    'online_nodes': 0,
+                    'offline_nodes': 0
+                }
+            
+            # Calculate total capacity (all nodes)
+            total_capacity = sum(node.storage_capacity for node in nodes)
+            used_capacity = sum(node.storage_used for node in nodes)
+            
+            # Determine which nodes are online
+            online_threshold = datetime.utcnow() - timedelta(minutes=2)
+            online_nodes = []
+            offline_nodes = []
+            
+            for node in nodes:
+                is_online = (
+                    node.last_heartbeat and 
+                    node.last_heartbeat > online_threshold
+                )
+                if is_online:
+                    online_nodes.append(node)
+                else:
+                    offline_nodes.append(node)
+            
+            # Calculate usable capacity (online nodes only)
+            usable_capacity = sum(node.storage_capacity for node in online_nodes)
+            
+            return {
+                'total_capacity': total_capacity,
+                'usable_capacity': usable_capacity,
+                'used_capacity': used_capacity,
+                'total_nodes': len(nodes),
+                'online_nodes': len(online_nodes),
+                'offline_nodes': len(offline_nodes)
+            }
+    
+    except Exception as e:
+        print(f"[ERROR] Failed to calculate capacity: {e}")
+        return {
+            'total_capacity': 0,
+            'usable_capacity': 0,
+            'used_capacity': 0,
+            'total_nodes': 0,
+            'online_nodes': 0,
+            'offline_nodes': 0
+        }
 
 # ============================================================================
 # Authentication Endpoints
@@ -165,7 +224,7 @@ def verify_admin():
 
 @admin_bp.route('/nodes', methods=['POST'])
 def create_node():
-    """Create and register a new storage node - FIXED VERSION"""
+    """Create and register a new storage node"""
     is_valid, message = verify_admin_key(request)
     if not is_valid:
         return error_response(message), 401
@@ -180,7 +239,6 @@ def create_node():
         return error_response("Missing required fields: node_id, port, storage_gb"), 400
     
     try:
-        # Check if node already exists in database
         from db.database import get_db_session
         from db.models import StorageNode
         
@@ -189,7 +247,7 @@ def create_node():
             if existing_node:
                 return error_response(f"Node {node_id} already exists"), 400
         
-        # Get project root and create node directory
+        # Create node directory
         cwd = Path(os.getcwd())
         if cwd.name == 'rest_api':
             project_root = cwd.parent
@@ -199,17 +257,9 @@ def create_node():
         node_storage_dir = project_root / f'node_storage_{node_id}'
         node_storage_dir.mkdir(exist_ok=True)
         
-        print(f"[ADMIN] Created node {node_id} storage at: {node_storage_dir}")
+        storage_capacity = int(storage_gb * 1024**3)
         
-        # CRITICAL FIX: Register the node in the database immediately
-        # This makes it appear in the UI like terminal-created nodes
-        storage_capacity = int(storage_gb * 1024**3)  # Convert GB to bytes
-        
-        # Use NodeManager to register (same as terminal nodes do via gRPC)
-        from storage.node_manager import NodeManager
-        node_manager = NodeManager()
-        
-        # Register with status='offline' and no heartbeat (not running yet)
+        # Register node in database
         with get_db_session() as session:
             new_node = StorageNode(
                 node_id=node_id,
@@ -217,17 +267,20 @@ def create_node():
                 port=port,
                 storage_capacity=storage_capacity,
                 storage_used=0,
-                cpu_cores=4,  # Default value
-                status='offline',  # Will change to 'online' when started
+                cpu_cores=4,
+                status='offline',
                 health_score=100.0,
-                last_heartbeat=None  # No heartbeat until node process starts
+                last_heartbeat=None
             )
             session.add(new_node)
             session.commit()
-            
-            print(f"[ADMIN] ✓ Node {node_id} registered in database (offline)")
-            print(f"[ADMIN] ✓ Node will appear in UI immediately")
-            print(f"[ADMIN] ✓ Click 'Start' to launch the node process")
+        
+        # Calculate new capacities
+        metrics = calculate_capacity_metrics()
+        
+        print(f"[ADMIN] ✓ Node {node_id} created and registered")
+        print(f"[ADMIN] Total Capacity: {metrics['total_capacity'] / (1024**3):.2f} GB")
+        print(f"[ADMIN] Usable Capacity: {metrics['usable_capacity'] / (1024**3):.2f} GB")
         
         return success_response({
             'node_id': node_id,
@@ -236,8 +289,11 @@ def create_node():
             'storage_gb': storage_gb,
             'storage_dir': str(node_storage_dir),
             'status': 'created',
-            'registered': True
-        }, message=f"Node {node_id} created and registered successfully. Click Start to launch it.")
+            'capacity_impact': {
+                'total_capacity': metrics['total_capacity'],
+                'usable_capacity': metrics['usable_capacity']
+            }
+        }, message=f"Node {node_id} created successfully. Click Start to launch it.")
     
     except Exception as e:
         print(f"[ERROR] Failed to create node: {e}")
@@ -247,7 +303,7 @@ def create_node():
 
 @admin_bp.route('/nodes/<node_id>/start', methods=['POST'])
 def start_node(node_id):
-    """Start a storage node - WORKS FOR ANY NODE - FIXED FOR PATHS WITH SPACES"""
+    """Start a storage node"""
     is_valid, message = verify_admin_key(request)
     if not is_valid:
         return error_response(message), 401
@@ -261,70 +317,38 @@ def start_node(node_id):
         return error_response("Missing required fields: port, storage_gb"), 400
     
     try:
-        # Check if node is already running
         existing_pid = read_pid_file(node_id)
         if existing_pid and is_process_running(existing_pid):
             return error_response(f"Node {node_id} is already running (PID: {existing_pid})"), 400
         
-        # Try to find if process is running without PID file
         running_pid = find_node_process(node_id)
         if running_pid:
             write_pid_file(node_id, running_pid)
-            return error_response(f"Node {node_id} is already running (PID: {running_pid}, recovered)"), 400
+            return error_response(f"Node {node_id} is already running (PID: {running_pid})"), 400
         
-        # Get current working directory
         cwd = Path(os.getcwd())
-        print(f"[ADMIN] Current working directory: {cwd}")
-        
-        # Get the project root
         if cwd.name == 'rest_api':
             project_root = cwd.parent
         else:
             project_root = cwd
         
-        print(f"[ADMIN] Project root: {project_root}")
-        
-        # Try multiple possible locations using Path
         possible_paths = [
             project_root / 'node' / 'storage_node.py',
             project_root / 'backend' / 'node' / 'storage_node.py',
             project_root / 'clients' / 'storage_node.py',
-            project_root / 'backend' / 'clients' / 'storage_node.py',
-            cwd / 'node' / 'storage_node.py',
-            cwd / 'backend' / 'node' / 'storage_node.py',
-            cwd / 'clients' / 'storage_node.py',
-            cwd / 'backend' / 'clients' / 'storage_node.py',
         ]
         
         node_script = None
         for path in possible_paths:
-            print(f"[ADMIN] Checking: {path}")
             if path.exists():
                 node_script = str(path.absolute())
-                print(f"[ADMIN] ✓ Found storage_node.py at: {node_script}")
                 break
         
         if not node_script:
-            error_msg = "Storage node script not found. Tried:\n" + "\n".join(f"  - {p}" for p in possible_paths)
-            print(f"[ERROR] {error_msg}")
-            return error_response(error_msg), 500
+            return error_response("Storage node script not found"), 500
         
-        # Prepare command
-        cmd = [
-            sys.executable,
-            node_script,
-            node_id,
-            host,
-            str(port),
-            str(storage_gb)
-        ]
+        cmd = [sys.executable, node_script, node_id, host, str(port), str(storage_gb)]
         
-        print(f"[ADMIN] Starting node {node_id} on {host}:{port}")
-        print(f"[ADMIN] Node will create storage at: {project_root / f'node_storage_{node_id}'}")
-        print(f"[ADMIN] Command: {' '.join(cmd)}")
-        print(f"[ADMIN] Working directory: {project_root}")
-        
-        # Start the process
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -333,38 +357,21 @@ def start_node(node_id):
             start_new_session=True
         )
         
-        # Write PID file immediately
-        if not write_pid_file(node_id, process.pid):
-            print(f"[ERROR] Failed to write PID file for node {node_id}")
-        
-        # Wait to verify it started successfully
-        print(f"[ADMIN] Waiting 3 seconds to verify startup...")
+        write_pid_file(node_id, process.pid)
         time.sleep(3)
         
-        # Check if process is still running
         if not is_process_running(process.pid):
             delete_pid_file(node_id)
-            try:
-                stdout, stderr = process.communicate(timeout=1)
-                stdout_text = stdout.decode('utf-8', errors='ignore') if stdout else ""
-                stderr_text = stderr.decode('utf-8', errors='ignore') if stderr else ""
-                error_msg = stderr_text or stdout_text or "Process died immediately after starting"
-                print(f"[ERROR] Node startup failed:")
-                print(f"  STDOUT: {stdout_text}")
-                print(f"  STDERR: {stderr_text}")
-                return error_response(f"Node failed to start: {error_msg}"), 500
-            except subprocess.TimeoutExpired:
-                error_msg = "Process died immediately (timeout getting output)"
-                print(f"[ERROR] {error_msg}")
-                return error_response(error_msg), 500
+            return error_response("Node failed to start"), 500
         
-        print(f"[ADMIN] ✓ Node {node_id} started successfully (PID: {process.pid})")
+        # Node will update metrics when it sends heartbeat
+        print(f"[ADMIN] ✓ Node {node_id} started (PID: {process.pid})")
         
         return success_response({
             'node_id': node_id,
             'pid': process.pid,
             'status': 'started'
-        }, message=f"Node {node_id} started successfully (PID: {process.pid})")
+        }, message=f"Node {node_id} started successfully")
     
     except Exception as e:
         print(f"[ERROR] Failed to start node: {e}")
@@ -374,60 +381,45 @@ def start_node(node_id):
 
 @admin_bp.route('/nodes/<node_id>/stop', methods=['POST'])
 def stop_node(node_id):
-    """Stop a running storage node - WORKS FOR ANY NODE"""
+    """Stop a running storage node"""
     is_valid, message = verify_admin_key(request)
     if not is_valid:
         return error_response(message), 401
     
     try:
-        print(f"[ADMIN] Attempting to stop node {node_id}")
-        
-        # Try to get PID from file first
         pid = read_pid_file(node_id)
-        print(f"[ADMIN] PID from file: {pid}")
-        
-        # If no PID file, try to find the process by scanning
         if not pid:
-            print(f"[ADMIN] No PID file found, scanning for process...")
             pid = find_node_process(node_id)
             if pid:
-                print(f"[ADMIN] Found node {node_id} running without PID file (PID: {pid})")
                 write_pid_file(node_id, pid)
-            else:
-                print(f"[ADMIN] No running process found for node {node_id}")
         
         if not pid:
-            # Double check by listing all storage_node.py processes
-            print(f"[ADMIN] Listing all storage_node.py processes:")
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                try:
-                    cmdline = proc.info['cmdline']
-                    if cmdline and 'storage_node.py' in ' '.join(cmdline):
-                        print(f"  - PID {proc.info['pid']}: {' '.join(cmdline)}")
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-            
-            return error_response(f"Node {node_id} is not running (no process found)"), 400
+            return error_response(f"Node {node_id} is not running"), 400
         
-        # Check if process is actually running
         if not is_process_running(pid):
-            print(f"[ADMIN] Process {pid} is not running, cleaning up PID file")
             delete_pid_file(node_id)
-            return error_response(f"Node {node_id} process not found (stale PID: {pid})"), 400
+            return error_response(f"Node {node_id} process not found"), 400
         
-        print(f"[ADMIN] Stopping node {node_id} (PID: {pid})")
-        
-        # Kill the process
         if kill_process(pid):
             delete_pid_file(node_id)
-            print(f"[ADMIN] Node {node_id} stopped successfully")
+            
+            # Recalculate usable capacity
+            metrics = calculate_capacity_metrics()
+            
+            print(f"[ADMIN] ✓ Node {node_id} stopped")
+            print(f"[ADMIN] Usable Capacity reduced to: {metrics['usable_capacity'] / (1024**3):.2f} GB")
+            
             return success_response({
                 'node_id': node_id,
                 'pid': pid,
-                'status': 'stopped'
-            }, message=f"Node {node_id} stopped successfully (PID: {pid})")
+                'status': 'stopped',
+                'capacity_impact': {
+                    'total_capacity': metrics['total_capacity'],
+                    'usable_capacity': metrics['usable_capacity']
+                }
+            }, message=f"Node {node_id} stopped successfully")
         else:
-            return error_response(f"Failed to stop node {node_id} (PID: {pid})"), 500
+            return error_response(f"Failed to stop node {node_id}"), 500
     
     except Exception as e:
         print(f"[ERROR] Failed to stop node: {e}")
@@ -437,58 +429,101 @@ def stop_node(node_id):
 
 @admin_bp.route('/nodes/<node_id>', methods=['DELETE'])
 def delete_node(node_id):
-    """Delete a storage node completely - WORKS FOR ANY NODE"""
+    """
+    Delete a storage node - SAFE WITH FORCE OPTION
+    Query param: force=true to delete even with chunks (data loss)
+    """
     is_valid, message = verify_admin_key(request)
     if not is_valid:
         return error_response(message), 401
     
+    force = request.args.get('force', 'false').lower() == 'true'
+    
     try:
-        # First, stop the node if it's running
+        from db.database import get_db_session
+        from db.models import StorageNode, Chunk
+        
+        # Stop node if running
         pid = read_pid_file(node_id)
         if not pid:
             pid = find_node_process(node_id)
         
         if pid and is_process_running(pid):
-            print(f"[ADMIN] Stopping running node {node_id} before deletion (PID: {pid})")
+            print(f"[ADMIN] Stopping running node {node_id} before deletion")
             kill_process(pid)
             delete_pid_file(node_id)
-        
-        # Delete node from database
-        from db.database import get_db_session
-        from db.models import StorageNode, Chunk
+            time.sleep(1)  # Wait for process to die
         
         with get_db_session() as session:
             node = session.query(StorageNode).filter_by(node_id=node_id).first()
             
             if not node:
-                return error_response(f"Node {node_id} not found in database"), 404
+                return error_response(f"Node {node_id} not found"), 404
             
-            # Check if node has chunks
-            chunk_count = session.query(Chunk).filter_by(primary_node_id=node_id).count()
+            # Check for chunks
+            chunks = session.query(Chunk).filter_by(primary_node_id=node_id).all()
+            chunk_count = len(chunks)
             
-            if chunk_count > 0:
-                return error_response(
-                    f"Cannot delete node {node_id}: it contains {chunk_count} chunks. "
-                    "Data must be migrated first."
-                ), 400
+            if chunk_count > 0 and not force:
+                # Get affected files for better error message
+                from db.models import File
+                affected_files = []
+                for chunk in chunks[:5]:  # Show up to 5 files
+                    file = session.query(File).filter_by(file_id=chunk.file_id).first()
+                    if file:
+                        affected_files.append(file.filename)
+                
+                error_msg = (
+                    f"Cannot delete node {node_id}: it contains {chunk_count} chunks.\n\n"
+                    f"Affected files (showing up to 5):\n" + 
+                    "\n".join(f"  - {f}" for f in affected_files) +
+                    f"\n\nOptions:\n"
+                    f"1. Migrate data to other nodes first (recommended)\n"
+                    f"2. Use force=true to delete anyway (WARNING: DATA LOSS)"
+                )
+                
+                return error_response(error_msg), 400
             
-            # Delete the node
+            # Store capacity before deletion
+            node_capacity = node.storage_capacity
+            
+            if force and chunk_count > 0:
+                print(f"[ADMIN] ⚠️  FORCE DELETE: Removing {chunk_count} chunks from node {node_id}")
+                
+                # Delete all chunks from this node
+                for chunk in chunks:
+                    session.delete(chunk)
+                    print(f"[ADMIN] Deleted chunk {chunk.chunk_id}")
+            
+            # Delete node from database
             session.delete(node)
             session.commit()
+            
+            print(f"[ADMIN] ✓ Node {node_id} deleted from database")
         
         # Delete node storage directory
-        node_storage_dir = os.path.join(os.getcwd(), f'node_storage_{node_id}')
-        if os.path.exists(node_storage_dir):
+        node_storage_dir = get_project_root() / f'node_storage_{node_id}'
+        if node_storage_dir.exists():
             import shutil
             shutil.rmtree(node_storage_dir)
-            print(f"[ADMIN] Deleted storage directory: {node_storage_dir}")
+            print(f"[ADMIN] ✓ Deleted storage directory: {node_storage_dir}")
         
-        print(f"[ADMIN] Node {node_id} deleted successfully")
+        # Recalculate capacities
+        metrics = calculate_capacity_metrics()
+        
+        print(f"[ADMIN] ✓ Total Capacity reduced to: {metrics['total_capacity'] / (1024**3):.2f} GB")
+        print(f"[ADMIN] ✓ Usable Capacity: {metrics['usable_capacity'] / (1024**3):.2f} GB")
         
         return success_response({
             'node_id': node_id,
-            'status': 'deleted'
-        }, message=f"Node {node_id} deleted successfully")
+            'status': 'deleted',
+            'chunks_deleted': chunk_count if force else 0,
+            'capacity_freed': node_capacity,
+            'capacity_impact': {
+                'total_capacity': metrics['total_capacity'],
+                'usable_capacity': metrics['usable_capacity']
+            }
+        }, message=f"Node {node_id} deleted successfully" + (f" ({chunk_count} chunks removed)" if force and chunk_count > 0 else ""))
     
     except Exception as e:
         print(f"[ERROR] Failed to delete node: {e}")
@@ -496,44 +531,39 @@ def delete_node(node_id):
         traceback.print_exc()
         return error_response(f"Failed to delete node: {str(e)}"), 500
 
-@admin_bp.route('/nodes/running', methods=['GET'])
-def get_running_nodes():
-    """Get list of currently running nodes (by scanning processes)"""
+@admin_bp.route('/nodes/capacity', methods=['GET'])
+def get_capacity_metrics():
+    """Get detailed capacity metrics"""
     is_valid, message = verify_admin_key(request)
     if not is_valid:
         return error_response(message), 401
     
     try:
-        running = []
-        
-        # Scan all PID files
-        for pid_file in PID_DIR.glob("*.pid"):
-            node_id = pid_file.stem
-            pid = read_pid_file(node_id)
-            
-            if pid:
-                if is_process_running(pid):
-                    running.append({
-                        'node_id': node_id,
-                        'pid': pid,
-                        'status': 'running'
-                    })
-                else:
-                    # Clean up stale PID file
-                    delete_pid_file(node_id)
+        metrics = calculate_capacity_metrics()
         
         return success_response({
-            'running_nodes': running,
-            'count': len(running)
+            'total_capacity_bytes': metrics['total_capacity'],
+            'total_capacity_gb': metrics['total_capacity'] / (1024**3),
+            'usable_capacity_bytes': metrics['usable_capacity'],
+            'usable_capacity_gb': metrics['usable_capacity'] / (1024**3),
+            'used_capacity_bytes': metrics['used_capacity'],
+            'used_capacity_gb': metrics['used_capacity'] / (1024**3),
+            'total_nodes': metrics['total_nodes'],
+            'online_nodes': metrics['online_nodes'],
+            'offline_nodes': metrics['offline_nodes'],
+            'usage_percentage': (
+                (metrics['used_capacity'] / metrics['usable_capacity'] * 100)
+                if metrics['usable_capacity'] > 0 else 0
+            )
         })
     
     except Exception as e:
-        print(f"[ERROR] Failed to get running nodes: {e}")
-        return error_response(f"Failed to get running nodes: {str(e)}"), 500
+        print(f"[ERROR] Failed to get capacity metrics: {e}")
+        return error_response(f"Failed to get capacity metrics: {str(e)}"), 500
 
 @admin_bp.route('/nodes', methods=['GET'])
 def list_nodes():
-    """List all storage nodes"""
+    """List all storage nodes with capacity info"""
     is_valid, message = verify_admin_key(request)
     if not is_valid:
         return error_response(message), 401
@@ -549,7 +579,6 @@ def list_nodes():
         if response.success:
             nodes = []
             for n in response.nodes:
-                # Check if node is actually running
                 pid = read_pid_file(n.node_id)
                 is_running = pid and is_process_running(pid)
                 
@@ -567,7 +596,19 @@ def list_nodes():
                     'pid': pid if is_running else None
                 })
             
-            return success_response({'nodes': nodes})
+            # Add capacity metrics
+            metrics = calculate_capacity_metrics()
+            
+            return success_response({
+                'nodes': nodes,
+                'capacity_metrics': {
+                    'total_capacity': metrics['total_capacity'],
+                    'usable_capacity': metrics['usable_capacity'],
+                    'used_capacity': metrics['used_capacity'],
+                    'online_nodes': metrics['online_nodes'],
+                    'offline_nodes': metrics['offline_nodes']
+                }
+            })
         else:
             return error_response("Failed to list nodes"), 400
     except Exception as e:
@@ -580,7 +621,7 @@ def list_nodes():
 
 @admin_bp.route('/status', methods=['GET'])
 def get_system_status():
-    """Get system status"""
+    """Get system status with capacity metrics"""
     is_valid, message = verify_admin_key(request)
     if not is_valid:
         return error_response(message), 401
@@ -594,13 +635,17 @@ def get_system_status():
         )
         
         if response.success:
+            # Add our capacity metrics
+            metrics = calculate_capacity_metrics()
+            
             return success_response({
-                'global_capacity_bytes': response.global_capacity_bytes,
-                'global_allocated_bytes': response.global_allocated_bytes,
+                'global_capacity_bytes': metrics['total_capacity'],
+                'usable_capacity_bytes': metrics['usable_capacity'],
                 'global_used_bytes': response.global_used_bytes,
                 'total_users': response.total_users,
                 'total_nodes': response.total_nodes,
                 'online_nodes': response.online_nodes,
+                'offline_nodes': metrics['offline_nodes'],
                 'total_files': response.total_files,
                 'total_chunks': response.total_chunks,
                 'system_health': response.system_health
@@ -615,7 +660,7 @@ def get_system_status():
 
 @admin_bp.route('/events', methods=['GET'])
 def stream_events():
-    """Stream system events (Server-Sent Events)"""
+    """Stream system events"""
     admin_key = request.args.get('admin_key')
     
     if not admin_key:
