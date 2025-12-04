@@ -11,12 +11,17 @@ import {
   HardDrive,
   AlertCircle,
   CheckCircle,
+  Database,
+  Activity,
 } from "lucide-react";
 
 const AdminNodeManagerPage = () => {
   const [nodes, setNodes] = useState([]);
+  const [capacityMetrics, setCapacityMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [operatingNodes, setOperatingNodes] = useState(new Set());
   const [newNode, setNewNode] = useState({
     node_id: "",
@@ -44,6 +49,7 @@ const AdminNodeManagerPage = () => {
       const data = await response.json();
       if (data.success) {
         setNodes(data.data.nodes || []);
+        setCapacityMetrics(data.data.capacity_metrics || null);
       }
     } catch (error) {
       console.error("Error loading nodes:", error);
@@ -172,7 +178,9 @@ const AdminNodeManagerPage = () => {
 
       const data = await response.json();
       if (data.success) {
-        alert(`Node ${nodeId} stopped successfully`);
+        alert(
+          `Node ${nodeId} stopped successfully. Usable capacity has been reduced.`
+        );
         await loadNodes();
         setTimeout(loadNodes, 2000);
       } else {
@@ -190,21 +198,20 @@ const AdminNodeManagerPage = () => {
     }
   };
 
-  const handleDeleteNode = async (nodeId) => {
-    if (
-      !confirm(
-        `Are you sure you want to delete node ${nodeId}? This will:\n` +
-          `- Stop the node if running\n` +
-          `- Delete all stored chunks\n` +
-          `- Remove node configuration\n\n` +
-          `This action cannot be undone!`
-      )
-    ) {
-      return;
-    }
+  const initiateDeleteNode = (nodeId) => {
+    const node = nodes.find((n) => n.node_id === nodeId);
+    setDeleteTarget({ nodeId, chunkCount: node?.chunk_count || 0 });
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteNode = async (force = false) => {
+    if (!deleteTarget) return;
+
+    const { nodeId, chunkCount } = deleteTarget;
 
     try {
-      const response = await fetch(`/api/admin/nodes/${nodeId}`, {
+      const url = `/api/admin/nodes/${nodeId}${force ? "?force=true" : ""}`;
+      const response = await fetch(url, {
         method: "DELETE",
         headers: {
           "X-Admin-Key": adminKey,
@@ -212,11 +219,26 @@ const AdminNodeManagerPage = () => {
       });
 
       const data = await response.json();
+
       if (data.success) {
-        alert(`Node ${nodeId} deleted successfully`);
+        alert(
+          `Node ${nodeId} deleted successfully! Total capacity has been reduced.`
+        );
+        setShowDeleteModal(false);
+        setDeleteTarget(null);
         loadNodes();
       } else {
-        alert(data.message || "Failed to delete node");
+        // Show error with option to force delete
+        if (data.message && data.message.includes("contains") && !force) {
+          const forceConfirm = confirm(
+            `${data.message}\n\n⚠️  WARNING: Force deleting will cause DATA LOSS!\n\nContinue anyway?`
+          );
+          if (forceConfirm) {
+            handleDeleteNode(true); // Retry with force
+          }
+        } else {
+          alert(data.message || "Failed to delete node");
+        }
       }
     } catch (error) {
       alert("Failed to delete node: " + error.message);
@@ -270,16 +292,16 @@ const AdminNodeManagerPage = () => {
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start space-x-3">
         <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
         <div className="text-sm text-blue-900">
-          <p className="font-medium mb-1">Full Node Control Enabled</p>
+          <p className="font-medium mb-1">Advanced Capacity Tracking</p>
           <p>
-            You can now start, stop, and delete any node in the system,
-            regardless of how it was created. Nodes auto-refresh every 5
-            seconds. Online nodes send heartbeats every 30 seconds.
+            <strong>Total Capacity</strong> = All nodes (reduces only when
+            deleted) |<strong> Usable Capacity</strong> = Online nodes only
+            (reduces when offline/paused)
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div className="bg-white border rounded-lg p-6">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm text-gray-600">Total Nodes</span>
@@ -287,32 +309,53 @@ const AdminNodeManagerPage = () => {
           </div>
           <p className="text-2xl font-bold">{nodes.length}</p>
         </div>
+
         <div className="bg-white border rounded-lg p-6">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm text-gray-600">Online</span>
             <CheckCircle className="w-4 h-4 text-green-500" />
           </div>
           <p className="text-2xl font-bold text-green-500">
-            {nodes.filter((n) => n.status === "online").length}
+            {capacityMetrics?.online_nodes || 0}
           </p>
         </div>
+
         <div className="bg-white border rounded-lg p-6">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm text-gray-600">Offline</span>
             <AlertCircle className="w-4 h-4 text-red-500" />
           </div>
           <p className="text-2xl font-bold text-red-500">
-            {nodes.filter((n) => n.status === "offline").length}
+            {capacityMetrics?.offline_nodes || 0}
           </p>
         </div>
-        <div className="bg-white border rounded-lg p-6">
+
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-6">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-600">Total Capacity</span>
-            <HardDrive className="w-4 h-4 text-gray-600" />
+            <span className="text-sm text-blue-900 font-medium">
+              Total Capacity
+            </span>
+            <Database className="w-4 h-4 text-blue-600" />
           </div>
-          <p className="text-2xl font-bold">
-            {formatBytes(nodes.reduce((sum, n) => sum + n.storage_capacity, 0))}
+          <p className="text-2xl font-bold text-blue-900">
+            {formatBytes(capacityMetrics?.total_capacity || 0)}
           </p>
+          <p className="text-xs text-blue-700 mt-1">
+            All nodes (incl. offline)
+          </p>
+        </div>
+
+        <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-6">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-green-900 font-medium">
+              Usable Capacity
+            </span>
+            <Activity className="w-4 h-4 text-green-600" />
+          </div>
+          <p className="text-2xl font-bold text-green-900">
+            {formatBytes(capacityMetrics?.usable_capacity || 0)}
+          </p>
+          <p className="text-xs text-green-700 mt-1">Online nodes only</p>
         </div>
       </div>
 
@@ -352,6 +395,11 @@ const AdminNodeManagerPage = () => {
                         >
                           {node.status}
                         </span>
+                        {node.chunk_count > 0 && (
+                          <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700">
+                            {node.chunk_count} chunks
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm text-gray-600 mb-3">
                         {node.host}:{node.port}
@@ -430,7 +478,7 @@ const AdminNodeManagerPage = () => {
                       </button>
                     )}
                     <button
-                      onClick={() => handleDeleteNode(node.node_id)}
+                      onClick={() => initiateDeleteNode(node.node_id)}
                       disabled={operatingNodes.has(node.node_id)}
                       className={`p-2 rounded-lg transition-colors ${
                         operatingNodes.has(node.node_id)
@@ -449,6 +497,7 @@ const AdminNodeManagerPage = () => {
         </div>
       </div>
 
+      {/* Create Node Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white border rounded-lg p-6 w-full max-w-md">
@@ -519,6 +568,62 @@ const AdminNodeManagerPage = () => {
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Create Node
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && deleteTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white border rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-start space-x-3 mb-4">
+              <AlertCircle className="w-6 h-6 text-red-500 flex-shrink-0 mt-1" />
+              <div>
+                <h2 className="text-xl font-bold text-red-900 mb-2">
+                  Delete Node {deleteTarget.nodeId}?
+                </h2>
+                <div className="text-sm text-gray-700 space-y-2">
+                  <p>This will permanently:</p>
+                  <ul className="list-disc list-inside space-y-1 ml-2">
+                    <li>Stop the node process if running</li>
+                    <li>Remove node from database</li>
+                    <li>Delete storage directory</li>
+                    <li>Reduce total capacity</li>
+                    {deleteTarget.chunkCount > 0 && (
+                      <li className="text-red-600 font-medium">
+                        Delete {deleteTarget.chunkCount} chunks (DATA LOSS!)
+                      </li>
+                    )}
+                  </ul>
+                  {deleteTarget.chunkCount > 0 && (
+                    <div className="bg-red-50 border border-red-200 rounded p-3 mt-3">
+                      <p className="font-medium text-red-900">⚠️ Warning:</p>
+                      <p className="text-red-800">
+                        This node contains {deleteTarget.chunkCount} chunks.
+                        Deleting will cause permanent data loss!
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteTarget(null);
+                }}
+                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteNode(false)}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                {deleteTarget.chunkCount > 0 ? "Force Delete" : "Delete"}
               </button>
             </div>
           </div>
