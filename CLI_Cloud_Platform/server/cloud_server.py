@@ -1,7 +1,3 @@
-"""
-Cloud Server - Main gRPC server handling all services
-UPDATED: Dynamic storage that grows with nodes
-"""
 import grpc
 from concurrent import futures
 import sys
@@ -181,6 +177,64 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
         user = db_session.query(User).filter_by(user_id=db_session_obj.user_id).first()
         return user
     
+    def _check_file_access(self, file_id, user_id, db_session):
+        """
+        Check if user has access to file (either owns it or has it shared with them)
+        Returns: (has_access: bool, file_info: dict or None, is_owner: bool)
+        """
+        from db.models import File, FileShare, User
+        
+        # First check if file exists and is not deleted
+        file = db_session.query(File).filter_by(
+            file_id=file_id,
+            deleted_at=None
+        ).first()
+        
+        if not file:
+            print(f"[ACCESS_CHECK] File {file_id} not found or deleted")
+            return False, None, False
+        
+        # Check if user is the owner
+        if file.user_id == user_id:
+            print(f"[ACCESS_CHECK] User {user_id} is owner of file {file_id}")
+            file_info = {
+                'file_id': file.file_id,
+                'filename': file.filename,
+                'file_size': file.file_size,
+                'mime_type': file.mime_type,
+                'created_at': file.created_at.isoformat(),
+                'modified_at': file.modified_at.isoformat(),
+                'is_shared': file.is_shared
+            }
+            return True, file_info, True
+        
+        # Check if file is shared with this user
+        share = db_session.query(FileShare).filter_by(
+            file_id=file_id,
+            shared_with_user_id=user_id
+        ).first()
+        
+        if share:
+            # Check if share has expired
+            if share.expires_at and share.expires_at < datetime.utcnow():
+                print(f"[ACCESS_CHECK] Share expired for user {user_id} on file {file_id}")
+                return False, None, False
+            
+            print(f"[ACCESS_CHECK] User {user_id} has shared access to file {file_id}")
+            file_info = {
+                'file_id': file.file_id,
+                'filename': file.filename,
+                'file_size': file.file_size,
+                'mime_type': file.mime_type,
+                'created_at': file.created_at.isoformat(),
+                'modified_at': file.modified_at.isoformat(),
+                'is_shared': file.is_shared
+            }
+            return True, file_info, False
+        
+        print(f"[ACCESS_CHECK] User {user_id} has no access to file {file_id}")
+        return False, None, False
+    
     def UploadFile(self, request_iterator, context):
         """Handle file upload with streaming"""
         try:
@@ -352,7 +406,7 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
                 return False
             
     def DownloadFile(self, request, context):
-        """Handle file download with streaming"""
+        """Handle file download with streaming - FIXED: Now supports shared files"""
         try:
             session_token = request.session_token
             file_id = request.file_id
@@ -372,13 +426,15 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
                 
                 print(f"[DOWNLOAD] User {user_email} ({user_id}) requesting file {file_id}")
                 
-                # Get file metadata
-                file_info = file_manager.get_file(file_id, user_id)
-                if not file_info:
-                    print(f"[ERROR] File not found: {file_id}")
-                    context.abort(grpc.StatusCode.NOT_FOUND, "File not found")
+                # FIXED: Check if user has access (owns or has shared access)
+                has_access, file_info, is_owner = self._check_file_access(file_id, user_id, db_session)
                 
-                print(f"[DOWNLOAD] Starting: {file_info['filename']} for user {user_email}")
+                if not has_access:
+                    print(f"[ERROR] User {user_id} has no access to file {file_id}")
+                    context.abort(grpc.StatusCode.PERMISSION_DENIED, "Access denied: File not found or not shared with you")
+                
+                access_type = "owner" if is_owner else "shared"
+                print(f"[DOWNLOAD] Starting: {file_info['filename']} for user {user_email} (access: {access_type})")
                 
                 # Get chunks
                 chunks = file_manager.get_file_chunks(file_id)
@@ -414,7 +470,7 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
                 
                 emit_event(
                     'FILE_DOWNLOADED',
-                    f'File downloaded: {file_info["filename"]}',
+                    f'File downloaded: {file_info["filename"]} ({access_type})',
                     user_id=user_id,
                     details=file_id
                 )
