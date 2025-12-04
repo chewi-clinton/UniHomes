@@ -9,6 +9,7 @@ import AdminAuthPage from "./pages/AdminAuthPage";
 import AdminNodeManagerPage from "./pages/AdminNodeManagerPage"; // Add this line
 import NotFoundPage from "./pages/NotFoundPage";
 import Layout from "./components/Layout";
+import SharedFilesPage from "./pages/SharedFilesPage";
 import LoadingSpinner from "./components/LoadingSpinner";
 // Protected Route Component for regular users
 const ProtectedRoute = () => {
@@ -60,6 +61,7 @@ function App() {
         {/* Protected User Routes */}
         <Route element={<ProtectedRoute />}>
           <Route element={<Layout />}>
+            <Route path="/shared" element={<SharedFilesPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/dashboard/:folderId" element={<DashboardPage />} />
             <Route path="/storage" element={<StoragePage />} />

@@ -18,12 +18,14 @@ import {
   Music,
   Archive,
   Search,
+  Share2, // Add this import
 } from "lucide-react";
 import { formatFileSize, formatDate, getFileType } from "../utils/helpers";
 import { FileSkeleton, ListSkeleton } from "../components/LoadingSpinner";
 import FileUpload from "../components/FileUpload";
 import ContextMenu from "../components/ContextMenu";
 import Breadcrumb from "../components/Breadcrumb";
+import ShareFileModal from "../components/ShareFileModal"; // Add this import
 
 const DashboardPage = () => {
   const { folderId } = useParams();
@@ -32,6 +34,7 @@ const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState("grid");
   const [showUpload, setShowUpload] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false); // Add this state
   const [contextMenu, setContextMenu] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -118,6 +121,23 @@ const DashboardPage = () => {
       } catch (error) {
         toast.error(`Failed to delete ${file.name}`);
       }
+    }
+  };
+
+  // Add this new handler for sharing files
+  const handleFileShare = async (fileId, email, permission) => {
+    try {
+      const response = await filesAPI.shareFile(fileId, email, permission);
+      if (response.data.success) {
+        toast.success(`File shared with ${email} successfully!`);
+        loadFiles(); // Reload to update is_shared status
+        return response.data;
+      }
+    } catch (error) {
+      console.error("Share error:", error);
+      const errorMsg = error.response?.data?.message || "Failed to share file";
+      toast.error(errorMsg);
+      throw error;
     }
   };
 
@@ -396,6 +416,13 @@ const DashboardPage = () => {
                   {formatFileSize(file.size)}
                 </p>
               )}
+              {/* Show shared indicator */}
+              {file.is_shared && (
+                <div className="mt-2 flex items-center text-xs text-primary">
+                  <Share2 className="w-3 h-3 mr-1" />
+                  <span>Shared</span>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -421,7 +448,12 @@ const DashboardPage = () => {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="font-medium truncate">{file.name}</h3>
+                <div className="flex items-center space-x-2">
+                  <h3 className="font-medium truncate">{file.name}</h3>
+                  {file.is_shared && (
+                    <Share2 className="w-4 h-4 text-primary flex-shrink-0" />
+                  )}
+                </div>
                 <p className="text-sm text-muted-foreground">
                   {formatDate(file.created_at)}
                 </p>
@@ -453,7 +485,7 @@ const DashboardPage = () => {
         />
       )}
 
-      {/* Context Menu */}
+      {/* Context Menu - UPDATED WITH SHARE BUTTON */}
       {contextMenu && selectedFile && (
         <ContextMenu
           x={contextMenu.x}
@@ -461,22 +493,39 @@ const DashboardPage = () => {
           onClose={() => setContextMenu(null)}
         >
           {selectedFile.type !== "folder" && (
-            <button
-              onClick={() => {
-                handleFileDownload(selectedFile);
-                setContextMenu(null);
-              }}
-              disabled={downloading === selectedFile.id}
-              className="w-full px-4 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center space-x-2 disabled:opacity-50"
-            >
-              <Download className="w-4 h-4" />
-              <span>
-                {downloading === selectedFile.id
-                  ? "Downloading..."
-                  : "Download"}
-              </span>
-            </button>
+            <>
+              {/* Share Button */}
+              <button
+                onClick={() => {
+                  setShowShareModal(true);
+                  setContextMenu(null);
+                }}
+                className="w-full px-4 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center space-x-2"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>Share</span>
+              </button>
+
+              {/* Download Button */}
+              <button
+                onClick={() => {
+                  handleFileDownload(selectedFile);
+                  setContextMenu(null);
+                }}
+                disabled={downloading === selectedFile.id}
+                className="w-full px-4 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center space-x-2 disabled:opacity-50"
+              >
+                <Download className="w-4 h-4" />
+                <span>
+                  {downloading === selectedFile.id
+                    ? "Downloading..."
+                    : "Download"}
+                </span>
+              </button>
+            </>
           )}
+
+          {/* Delete Button */}
           <button
             onClick={() => {
               handleFileDelete(selectedFile);
@@ -489,7 +538,20 @@ const DashboardPage = () => {
           </button>
         </ContextMenu>
       )}
+
+      {/* Share Modal */}
+      {showShareModal && selectedFile && (
+        <ShareFileModal
+          file={selectedFile}
+          onClose={() => {
+            setShowShareModal(false);
+            setSelectedFile(null);
+          }}
+          onShare={handleFileShare}
+        />
+      )}
     </div>
   );
 };
+
 export default DashboardPage;
