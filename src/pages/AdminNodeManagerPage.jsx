@@ -17,6 +17,7 @@ const AdminNodeManagerPage = () => {
   const [nodes, setNodes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [operatingNodes, setOperatingNodes] = useState(new Set());
   const [newNode, setNewNode] = useState({
     node_id: "",
     host: "localhost",
@@ -106,12 +107,14 @@ const AdminNodeManagerPage = () => {
         alert(data.message || "Failed to create node");
       }
     } catch (error) {
-      alert("Failed to create node");
+      alert("Failed to create node: " + error.message);
       console.error("Error creating node:", error);
     }
   };
 
   const handleStartNode = async (nodeId) => {
+    setOperatingNodes((prev) => new Set(prev).add(nodeId));
+
     try {
       const node = nodes.find((n) => n.node_id === nodeId);
       if (!node) return;
@@ -131,14 +134,24 @@ const AdminNodeManagerPage = () => {
 
       const data = await response.json();
       if (data.success) {
-        alert(`Node ${nodeId} started successfully!`);
-        setTimeout(loadNodes, 2000);
+        alert(
+          `Node ${nodeId} started successfully! It may take a few seconds to come online.`
+        );
+        await loadNodes();
+        setTimeout(() => loadNodes(), 3000);
+        setTimeout(() => loadNodes(), 6000);
       } else {
         alert(data.message || "Failed to start node");
       }
     } catch (error) {
-      alert("Failed to start node");
+      alert("Failed to start node: " + error.message);
       console.error("Error starting node:", error);
+    } finally {
+      setOperatingNodes((prev) => {
+        const next = new Set(prev);
+        next.delete(nodeId);
+        return next;
+      });
     }
   };
 
@@ -146,6 +159,8 @@ const AdminNodeManagerPage = () => {
     if (!confirm(`Are you sure you want to stop node ${nodeId}?`)) {
       return;
     }
+
+    setOperatingNodes((prev) => new Set(prev).add(nodeId));
 
     try {
       const response = await fetch(`/api/admin/nodes/${nodeId}/stop`, {
@@ -158,13 +173,20 @@ const AdminNodeManagerPage = () => {
       const data = await response.json();
       if (data.success) {
         alert(`Node ${nodeId} stopped successfully`);
-        loadNodes();
+        await loadNodes();
+        setTimeout(loadNodes, 2000);
       } else {
         alert(data.message || "Failed to stop node");
       }
     } catch (error) {
-      alert("Failed to stop node");
+      alert("Failed to stop node: " + error.message);
       console.error("Error stopping node:", error);
+    } finally {
+      setOperatingNodes((prev) => {
+        const next = new Set(prev);
+        next.delete(nodeId);
+        return next;
+      });
     }
   };
 
@@ -197,7 +219,7 @@ const AdminNodeManagerPage = () => {
         alert(data.message || "Failed to delete node");
       }
     } catch (error) {
-      alert("Failed to delete node");
+      alert("Failed to delete node: " + error.message);
       console.error("Error deleting node:", error);
     }
   };
@@ -375,23 +397,46 @@ const AdminNodeManagerPage = () => {
                     {node.status === "offline" ? (
                       <button
                         onClick={() => handleStartNode(node.node_id)}
-                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                        disabled={operatingNodes.has(node.node_id)}
+                        className={`p-2 rounded-lg transition-colors ${
+                          operatingNodes.has(node.node_id)
+                            ? "text-gray-400 bg-gray-100 cursor-not-allowed"
+                            : "text-green-600 hover:bg-green-50"
+                        }`}
                         title="Start Node"
                       >
-                        <Play className="w-5 h-5" />
+                        {operatingNodes.has(node.node_id) ? (
+                          <RefreshCw className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <Play className="w-5 h-5" />
+                        )}
                       </button>
                     ) : (
                       <button
                         onClick={() => handleStopNode(node.node_id)}
-                        className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors"
+                        disabled={operatingNodes.has(node.node_id)}
+                        className={`p-2 rounded-lg transition-colors ${
+                          operatingNodes.has(node.node_id)
+                            ? "text-gray-400 bg-gray-100 cursor-not-allowed"
+                            : "text-yellow-600 hover:bg-yellow-50"
+                        }`}
                         title="Stop Node"
                       >
-                        <Square className="w-5 h-5" />
+                        {operatingNodes.has(node.node_id) ? (
+                          <RefreshCw className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <Square className="w-5 h-5" />
+                        )}
                       </button>
                     )}
                     <button
                       onClick={() => handleDeleteNode(node.node_id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      disabled={operatingNodes.has(node.node_id)}
+                      className={`p-2 rounded-lg transition-colors ${
+                        operatingNodes.has(node.node_id)
+                          ? "text-gray-400 bg-gray-100 cursor-not-allowed"
+                          : "text-red-600 hover:bg-red-50"
+                      }`}
                       title="Delete Node"
                     >
                       <Trash2 className="w-5 h-5" />
