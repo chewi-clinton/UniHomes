@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Storage Node - Stores file chunks on disk using gRPC
-FIXED: Proper import paths and class definition
+FIXED: Uses absolute paths for consistent storage location
 """
 import grpc
 from concurrent import futures
@@ -10,6 +10,7 @@ import sys
 import time
 import threading
 from datetime import datetime
+from pathlib import Path
 
 # CRITICAL: Add parent directory to Python path BEFORE imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -101,6 +102,18 @@ class StorageNodeServicer(cloud_storage_pb2_grpc.NodeServiceServicer):
             context.abort(grpc.StatusCode.INTERNAL, str(e))
 
 
+def get_project_root():
+    """
+    Get the project root directory (where this script's parent is)
+    This ensures storage is always created in the same place
+    """
+    # This file is in: /project_root/node/storage_node.py
+    # We want: /project_root/
+    script_dir = Path(__file__).resolve().parent  # /project_root/node/
+    project_root = script_dir.parent  # /project_root/
+    return project_root
+
+
 def register_with_gateway(node_id, host, port, storage_capacity, gateway_host='localhost:50051'):
     """Register node with cloud gateway"""
     try:
@@ -160,14 +173,19 @@ def send_heartbeat(node_id, storage_dir, gateway_host='localhost:50051'):
 def serve(node_id, host, port, storage_capacity_gb):
     """Start the storage node"""
     storage_capacity = int(storage_capacity_gb * 1024**3)
-    storage_dir = f'node_storage_{node_id}'
+    
+    # FIXED: Use absolute path in project root
+    project_root = get_project_root()
+    storage_dir = project_root / f'node_storage_{node_id}'
+    storage_dir = str(storage_dir)  # Convert Path to string for compatibility
     
     print("=" * 60)
     print(f"STORAGE NODE - {node_id}")
     print("=" * 60)
     print(f"Address: {host}:{port}")
     print(f"Storage: {storage_capacity_gb} GB")
-    print(f"Directory: {storage_dir}")
+    print(f"Project Root: {project_root}")
+    print(f"Storage Directory: {storage_dir}")
     print("=" * 60)
     
     # Register with gateway

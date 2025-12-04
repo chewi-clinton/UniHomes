@@ -1,4 +1,5 @@
-# app/routes/admin.py - Integrated version with full node control + all endpoints
+# app/routes/admin.py - COMPLETE FIXED VERSION
+# Replace the entire file with this version
 
 from flask import Blueprint, request, jsonify, Response, current_app
 from app.utils.grpc_client import get_grpc_client
@@ -17,9 +18,17 @@ from pathlib import Path
 
 admin_bp = Blueprint('admin', __name__)
 
-# PID file directory
-PID_DIR = Path(os.getcwd()) / "node_pids"
+# FIXED: PID file directory should be in project root, not rest_api
+def get_project_root():
+    """Get the project root directory"""
+    cwd = Path(os.getcwd())
+    if cwd.name == 'rest_api':
+        return cwd.parent
+    return cwd
+
+PID_DIR = get_project_root() / "node_pids"
 PID_DIR.mkdir(exist_ok=True)
+print(f"[ADMIN] PID directory: {PID_DIR}")
 
 # ============================================================================
 # Process Management Utilities
@@ -74,16 +83,13 @@ def find_node_process(node_id):
             cmdline = proc.info['cmdline']
             if cmdline:
                 cmdline_str = ' '.join(cmdline)
-                # Check if this is a storage_node.py process with matching node_id
                 if 'storage_node.py' in cmdline_str:
-                    # Extract the node_id argument from command line
-                    # Command format: python storage_node.py <node_id> <host> <port> <storage_gb>
                     if node_id in cmdline:
                         print(f"[ADMIN] Found matching process - PID: {proc.info['pid']}, CMD: {cmdline_str}")
                         return proc.info['pid']
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
-    print(f"[ADMIN] No process found for node_id: {node_id}")
+    print(f"[ADMIN] No running process found for node_id: {node_id}")
     return None
 
 def kill_process(pid):
@@ -93,7 +99,6 @@ def kill_process(pid):
         print(f"[ADMIN] Terminating process {pid}...")
         process.terminate()
         
-        # Wait up to 5 seconds for graceful shutdown
         try:
             process.wait(timeout=5)
             print(f"[ADMIN] Process {pid} terminated gracefully")
@@ -160,7 +165,7 @@ def verify_admin():
 
 @admin_bp.route('/nodes', methods=['POST'])
 def create_node():
-    """Create and register a new storage node"""
+    """Create and register a new storage node - FIXED VERSION"""
     is_valid, message = verify_admin_key(request)
     if not is_valid:
         return error_response(message), 401
@@ -175,33 +180,64 @@ def create_node():
         return error_response("Missing required fields: node_id, port, storage_gb"), 400
     
     try:
-        # Check if node already exists
-        client = get_grpc_client()
-        admin_key = request.headers.get('X-Admin-Key')
+        # Check if node already exists in database
+        from db.database import get_db_session
+        from db.models import StorageNode
         
-        response = client.admin_stub.ListAllNodes(
-            cloud_storage_pb2.ListNodesRequest(admin_key=admin_key.strip())
-        )
-        
-        if response.success:
-            existing_node = next((n for n in response.nodes if n.node_id == node_id), None)
+        with get_db_session() as session:
+            existing_node = session.query(StorageNode).filter_by(node_id=node_id).first()
             if existing_node:
                 return error_response(f"Node {node_id} already exists"), 400
         
-        # Create node directory
-        node_storage_dir = os.path.join(os.getcwd(), f'node_storage_{node_id}')
-        os.makedirs(node_storage_dir, exist_ok=True)
+        # Get project root and create node directory
+        cwd = Path(os.getcwd())
+        if cwd.name == 'rest_api':
+            project_root = cwd.parent
+        else:
+            project_root = cwd
         
-        print(f"[ADMIN] Created node {node_id} - ready to start")
+        node_storage_dir = project_root / f'node_storage_{node_id}'
+        node_storage_dir.mkdir(exist_ok=True)
+        
+        print(f"[ADMIN] Created node {node_id} storage at: {node_storage_dir}")
+        
+        # CRITICAL FIX: Register the node in the database immediately
+        # This makes it appear in the UI like terminal-created nodes
+        storage_capacity = int(storage_gb * 1024**3)  # Convert GB to bytes
+        
+        # Use NodeManager to register (same as terminal nodes do via gRPC)
+        from storage.node_manager import NodeManager
+        node_manager = NodeManager()
+        
+        # Register with status='offline' and no heartbeat (not running yet)
+        with get_db_session() as session:
+            new_node = StorageNode(
+                node_id=node_id,
+                host=host,
+                port=port,
+                storage_capacity=storage_capacity,
+                storage_used=0,
+                cpu_cores=4,  # Default value
+                status='offline',  # Will change to 'online' when started
+                health_score=100.0,
+                last_heartbeat=None  # No heartbeat until node process starts
+            )
+            session.add(new_node)
+            session.commit()
+            
+            print(f"[ADMIN] ✓ Node {node_id} registered in database (offline)")
+            print(f"[ADMIN] ✓ Node will appear in UI immediately")
+            print(f"[ADMIN] ✓ Click 'Start' to launch the node process")
         
         return success_response({
             'node_id': node_id,
             'host': host,
             'port': port,
             'storage_gb': storage_gb,
-            'storage_dir': node_storage_dir,
-            'status': 'created'
-        }, message=f"Node {node_id} created successfully. Click Start to launch it.")
+            'storage_dir': str(node_storage_dir),
+            'status': 'created',
+            'registered': True
+        }, message=f"Node {node_id} created and registered successfully. Click Start to launch it.")
     
     except Exception as e:
         print(f"[ERROR] Failed to create node: {e}")
@@ -211,7 +247,7 @@ def create_node():
 
 @admin_bp.route('/nodes/<node_id>/start', methods=['POST'])
 def start_node(node_id):
-    """Start a storage node - WORKS FOR ANY NODE"""
+    """Start a storage node - WORKS FOR ANY NODE - FIXED FOR PATHS WITH SPACES"""
     is_valid, message = verify_admin_key(request)
     if not is_valid:
         return error_response(message), 401
@@ -236,56 +272,99 @@ def start_node(node_id):
             write_pid_file(node_id, running_pid)
             return error_response(f"Node {node_id} is already running (PID: {running_pid}, recovered)"), 400
         
-        # Find the storage_node.py file
-        # Get the project root (assuming admin.py is in app/routes/)
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        # Get current working directory
+        cwd = Path(os.getcwd())
+        print(f"[ADMIN] Current working directory: {cwd}")
         
-        # Try multiple possible locations
+        # Get the project root
+        if cwd.name == 'rest_api':
+            project_root = cwd.parent
+        else:
+            project_root = cwd
+        
+        print(f"[ADMIN] Project root: {project_root}")
+        
+        # Try multiple possible locations using Path
         possible_paths = [
-            os.path.join(project_root, 'node', 'storage_node.py'),
-            os.path.join(project_root, 'backend', 'clients', 'storage_node.py'),
-            os.path.join(project_root, 'clients', 'storage_node.py'),
+            project_root / 'node' / 'storage_node.py',
+            project_root / 'backend' / 'node' / 'storage_node.py',
+            project_root / 'clients' / 'storage_node.py',
+            project_root / 'backend' / 'clients' / 'storage_node.py',
+            cwd / 'node' / 'storage_node.py',
+            cwd / 'backend' / 'node' / 'storage_node.py',
+            cwd / 'clients' / 'storage_node.py',
+            cwd / 'backend' / 'clients' / 'storage_node.py',
         ]
         
         node_script = None
         for path in possible_paths:
-            if os.path.exists(path):
-                node_script = path
-                print(f"[ADMIN] Found storage_node.py at: {path}")
+            print(f"[ADMIN] Checking: {path}")
+            if path.exists():
+                node_script = str(path.absolute())
+                print(f"[ADMIN] ✓ Found storage_node.py at: {node_script}")
                 break
         
         if not node_script:
-            return error_response(f"Storage node script not found. Tried: {possible_paths}"), 500
+            error_msg = "Storage node script not found. Tried:\n" + "\n".join(f"  - {p}" for p in possible_paths)
+            print(f"[ERROR] {error_msg}")
+            return error_response(error_msg), 500
         
-        # Start the node process
+        # Prepare command
+        cmd = [
+            sys.executable,
+            node_script,
+            node_id,
+            host,
+            str(port),
+            str(storage_gb)
+        ]
+        
         print(f"[ADMIN] Starting node {node_id} on {host}:{port}")
+        print(f"[ADMIN] Node will create storage at: {project_root / f'node_storage_{node_id}'}")
+        print(f"[ADMIN] Command: {' '.join(cmd)}")
+        print(f"[ADMIN] Working directory: {project_root}")
         
+        # Start the process
         process = subprocess.Popen(
-            [sys.executable, node_script, node_id, host, str(port), str(storage_gb)],
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            cwd=project_root
+            cwd=str(project_root),
+            start_new_session=True
         )
         
-        # Write PID file
-        write_pid_file(node_id, process.pid)
+        # Write PID file immediately
+        if not write_pid_file(node_id, process.pid):
+            print(f"[ERROR] Failed to write PID file for node {node_id}")
         
-        # Wait a moment to check if it started successfully
-        time.sleep(2)
+        # Wait to verify it started successfully
+        print(f"[ADMIN] Waiting 3 seconds to verify startup...")
+        time.sleep(3)
         
+        # Check if process is still running
         if not is_process_running(process.pid):
             delete_pid_file(node_id)
-            stdout, stderr = process.communicate()
-            error_msg = stderr.decode() if stderr else stdout.decode()
-            return error_response(f"Node failed to start: {error_msg}"), 500
+            try:
+                stdout, stderr = process.communicate(timeout=1)
+                stdout_text = stdout.decode('utf-8', errors='ignore') if stdout else ""
+                stderr_text = stderr.decode('utf-8', errors='ignore') if stderr else ""
+                error_msg = stderr_text or stdout_text or "Process died immediately after starting"
+                print(f"[ERROR] Node startup failed:")
+                print(f"  STDOUT: {stdout_text}")
+                print(f"  STDERR: {stderr_text}")
+                return error_response(f"Node failed to start: {error_msg}"), 500
+            except subprocess.TimeoutExpired:
+                error_msg = "Process died immediately (timeout getting output)"
+                print(f"[ERROR] {error_msg}")
+                return error_response(error_msg), 500
         
-        print(f"[ADMIN] Node {node_id} started successfully (PID: {process.pid})")
+        print(f"[ADMIN] ✓ Node {node_id} started successfully (PID: {process.pid})")
         
         return success_response({
             'node_id': node_id,
             'pid': process.pid,
             'status': 'started'
-        }, message=f"Node {node_id} started successfully")
+        }, message=f"Node {node_id} started successfully (PID: {process.pid})")
     
     except Exception as e:
         print(f"[ERROR] Failed to start node: {e}")
