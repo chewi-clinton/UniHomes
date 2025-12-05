@@ -1,25 +1,23 @@
+// src/pages/LoginPage.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { Cloud, Mail, ArrowRight, Loader2 } from "lucide-react";
+import { Mail, ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { validateEmail } from "../utils/helpers";
+import logo from "../img/logo.png"; // Your FileSphere logo
 
+// OTP Input Component (unchanged — perfect as-is)
 const OTPInput = ({ value, onChange, onComplete }) => {
   const inputRefs = React.useRef([]);
-  const hasCalledComplete = React.useRef(false); // FIX: Prevent multiple calls
+  const hasCalledComplete = React.useRef(false);
 
   useEffect(() => {
-    // FIX: Only call onComplete once when we have 6 digits
     if (value.length === 6 && !hasCalledComplete.current && onComplete) {
       hasCalledComplete.current = true;
       onComplete(value);
     }
-
-    // Reset the flag when value changes (e.g., user edits)
-    if (value.length < 6) {
-      hasCalledComplete.current = false;
-    }
+    if (value.length < 6) hasCalledComplete.current = false;
   }, [value, onComplete]);
 
   const handleInputChange = (index, e) => {
@@ -31,7 +29,6 @@ const OTPInput = ({ value, onChange, onComplete }) => {
     const newValueStr = newValue.join("");
     onChange(newValueStr);
 
-    // Move to next input if digit entered
     if (digit && index < 5) {
       inputRefs.current[index + 1]?.focus();
     }
@@ -45,27 +42,26 @@ const OTPInput = ({ value, onChange, onComplete }) => {
 
   const handlePaste = (e) => {
     e.preventDefault();
-    const pastedData = e.clipboardData.getData("text").slice(0, 6);
-    if (/^\d{6}$/.test(pastedData)) {
-      onChange(pastedData);
+    const pasted = e.clipboardData.getData("text").slice(0, 6);
+    if (/^\d{6}$/.test(pasted)) {
+      onChange(pasted);
       inputRefs.current[5]?.focus();
     }
   };
 
   return (
-    <div className="flex justify-center space-x-2" onPaste={handlePaste}>
-      {Array.from({ length: 6 }).map((_, index) => (
+    <div className="flex justify-center space-x-3" onPaste={handlePaste}>
+      {Array.from({ length: 6 }).map((_, i) => (
         <input
-          key={index}
-          ref={(el) => (inputRefs.current[index] = el)}
+          key={i}
+          ref={(el) => (inputRefs.current[i] = el)}
           type="text"
           inputMode="numeric"
-          pattern="[0-9]"
           maxLength="1"
-          value={value[index] || ""}
-          onChange={(e) => handleInputChange(index, e)}
-          onKeyDown={(e) => handleKeyDown(index, e)}
-          className="w-12 h-14 text-center text-2xl font-bold bg-accent border-2 border-border rounded-lg focus:border-primary focus:outline-none transition-colors"
+          value={value[i] || ""}
+          onChange={(e) => handleInputChange(i, e)}
+          onKeyDown={(e) => handleKeyDown(i, e)}
+          className="w-14 h-14 text-center text-2xl font-bold bg-muted/50 border-2 border-border rounded-xl focus:border-primary focus:outline-none transition-all"
         />
       ))}
     </div>
@@ -73,128 +69,108 @@ const OTPInput = ({ value, onChange, onComplete }) => {
 };
 
 const LoginPage = ({ isEnroll = false }) => {
-  const [step, setStep] = useState("email"); // 'email', 'otp', 'enroll'
+  const [step, setStep] = useState("email");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isVerifying, setIsVerifying] = useState(false); // FIX: Prevent multiple verification calls
+  const [isVerifying, setIsVerifying] = useState(false);
+
   const { sendOTP, verifyOTP, enroll, login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
 
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate("/dashboard");
-    }
+    if (isAuthenticated) navigate("/dashboard");
   }, [isAuthenticated, navigate]);
 
   const handleSendOTP = async (e) => {
     e.preventDefault();
-    if (!validateEmail(email)) {
-      toast.error("Please enter a valid email address");
-      return;
-    }
+    if (!validateEmail(email)) return toast.error("Please enter a valid email");
 
     setLoading(true);
     const success = await sendOTP(email);
-    if (success) {
-      setStep("otp");
-    }
+    if (success) setStep("otp");
     setLoading(false);
   };
 
   const handleVerifyOTP = async () => {
-    // FIX: Prevent multiple simultaneous verification attempts
-    if (isVerifying || otp.length !== 6) {
-      if (otp.length !== 6) {
-        toast.error("Please enter a 6-digit OTP");
-      }
-      return;
-    }
-
+    if (isVerifying || otp.length !== 6) return;
     setIsVerifying(true);
     setLoading(true);
 
     const result = await verifyOTP(email, otp);
     if (result) {
       if (result.exists) {
-        // User exists, proceed with login
-        const success = await login(email);
-        if (success) {
-          navigate("/dashboard");
-        }
+        await login(email);
+        navigate("/dashboard");
       } else {
-        // New user, proceed with enrollment
         setStep("enroll");
       }
     } else {
-      // FIX: Clear OTP on failure so user can try again
       setOtp("");
     }
-
     setLoading(false);
     setIsVerifying(false);
   };
 
   const handleEnroll = async (e) => {
     e.preventDefault();
-    if (!name.trim()) {
-      toast.error("Please enter your name");
-      return;
-    }
+    if (!name.trim()) return toast.error("Please enter your name");
 
     setLoading(true);
     const success = await enroll(email, name.trim());
-    if (success) {
-      navigate("/dashboard");
-    }
+    if (success) navigate("/dashboard");
     setLoading(false);
   };
 
   const handleResendOTP = async () => {
     setLoading(true);
-    setOtp(""); // FIX: Clear OTP input when resending
+    setOtp("");
     await sendOTP(email);
     setLoading(false);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center gradient-bg">
-      <div className="w-full max-w-md mx-4">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center mb-4">
-            <Cloud className="w-12 h-12 text-white mr-3" />
-            <h1 className="text-3xl font-bold text-white">CloudDrive</h1>
-          </div>
-          <p className="text-white/80">Your files, everywhere you are</p>
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4">
+      <div className="w-full max-w-md">
+        {/* Logo + Brand */}
+        <div className="text-center mb-10">
+          <img
+            src={logo}
+            alt="FileSphere"
+            className="w-24 h-24 mx-auto mb-4 rounded-2xl shadow-2xl"
+          />
+          <h1 className="text-4xl font-bold text-white tracking-tight">
+            FileSphere
+          </h1>
+          <p className="text-white/60 mt-2">
+            Secure cloud storage, reimagined.
+          </p>
         </div>
 
-        {/* Form Card */}
-        <div className="bg-card rounded-2xl shadow-2xl p-8 animate-scale-in">
+        {/* Auth Card */}
+        <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl p-8">
           {/* Email Step */}
           {step === "email" && (
-            <div className="space-y-6">
+            <div className="space-y-8">
               <div className="text-center">
-                <h2 className="text-2xl font-bold mb-2">
-                  {isEnroll ? "Create Account" : "Welcome Back"}
+                <h2 className="text-2xl font-bold text-white">
+                  {isEnroll ? "Create Your Account" : "Welcome Back"}
                 </h2>
-                <p className="text-muted-foreground">
-                  Enter your email to{" "}
-                  {isEnroll ? "create an account" : "sign in"}
+                <p className="text-white/70 mt-2">
+                  Enter your email to {isEnroll ? "get started" : "sign in"}
                 </p>
               </div>
 
-              <form onSubmit={handleSendOTP} className="space-y-4">
+              <form onSubmit={handleSendOTP} className="space-y-5">
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/60" />
                   <input
                     type="email"
-                    placeholder="Enter your email"
+                    placeholder="you@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 bg-accent border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                    className="w-full pl-12 pr-4 py-4 bg-white/10 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-primary transition-all"
                     required
                   />
                 </div>
@@ -202,14 +178,14 @@ const LoginPage = ({ isEnroll = false }) => {
                 <button
                   type="submit"
                   disabled={loading || !email}
-                  className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                  className="w-full bg-primary hover:bg-primary/90 text-white font-semibold py-4 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center space-x-2"
                 >
                   {loading ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     <>
-                      Continue
-                      <ArrowRight className="w-5 h-5 ml-2" />
+                      <span>Continue</span>
+                      <ArrowRight className="w-5 h-5" />
                     </>
                   )}
                 </button>
@@ -219,13 +195,13 @@ const LoginPage = ({ isEnroll = false }) => {
 
           {/* OTP Step */}
           {step === "otp" && (
-            <div className="space-y-6">
+            <div className="space-y-8">
               <div className="text-center">
-                <h2 className="text-2xl font-bold mb-2">Verify Email</h2>
-                <p className="text-muted-foreground mb-4">
-                  Enter the 6-digit code sent to
-                </p>
-                <p className="font-medium text-primary">{email}</p>
+                <h2 className="text-2xl font-bold text-white">
+                  Check Your Email
+                </h2>
+                <p className="text-white/70 mt-2">We sent a 6-digit code to</p>
+                <p className="text-primary font-medium mt-1">{email}</p>
               </div>
 
               <div className="space-y-6">
@@ -238,91 +214,83 @@ const LoginPage = ({ isEnroll = false }) => {
                 <button
                   onClick={handleVerifyOTP}
                   disabled={loading || otp.length !== 6}
-                  className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                  className="w-full bg-primary hover:bg-primary/90 text-white font-semibold py-4 rounded-xl transition-all disabled:opacity-50"
                 >
                   {loading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <Loader2 className="w-5 h-5 animate-spin mx-auto" />
                   ) : (
-                    "Verify OTP"
+                    "Verify & Continue"
                   )}
                 </button>
 
-                <div className="text-center">
-                  <button
-                    onClick={handleResendOTP}
-                    disabled={loading}
-                    className="text-sm text-primary hover:underline disabled:opacity-50"
-                  >
-                    Didn't receive code? Resend OTP
-                  </button>
-                </div>
+                <button
+                  onClick={handleResendOTP}
+                  disabled={loading}
+                  className="w-full text-white/70 hover:text-white text-sm underline transition-colors"
+                >
+                  Didn’t receive it? Resend code
+                </button>
               </div>
             </div>
           )}
 
           {/* Enroll Step */}
           {step === "enroll" && (
-            <div className="space-y-6">
+            <div className="space-y-8">
               <div className="text-center">
-                <h2 className="text-2xl font-bold mb-2">Complete Setup</h2>
-                <p className="text-muted-foreground">
-                  Enter your name to complete your account
-                </p>
+                <h2 className="text-2xl font-bold text-white">Almost There!</h2>
+                <p className="text-white/70 mt-2">Tell us your name</p>
               </div>
 
-              <form onSubmit={handleEnroll} className="space-y-4">
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Enter your name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full px-4 py-3 bg-accent border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary transition-all"
-                    required
-                    autoFocus
-                  />
-                </div>
+              <form onSubmit={handleEnroll} className="space-y-5">
+                <input
+                  type="text"
+                  placeholder="Your full name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-5 py-4 bg-white/10 border border-white/30 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                  autoFocus
+                  required
+                />
 
                 <button
                   type="submit"
                   disabled={loading || !name.trim()}
-                  className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                  className="w-full bg-primary hover:bg-primary/90 text-white font-semibold py-4 rounded-xl transition-all disabled:opacity-50"
                 >
                   {loading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <Loader2 className="w-5 h-5 animate-spin mx-auto" />
                   ) : (
-                    "Create Account"
+                    "Complete Account"
                   )}
                 </button>
               </form>
             </div>
           )}
 
-          {/* Back button */}
+          {/* Back Link */}
           {step !== "email" && (
-            <div className="mt-6 text-center">
-              <button
-                onClick={() => {
-                  setStep("email");
-                  setOtp("");
-                }}
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                ← Back to email
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                setStep("email");
+                setOtp("");
+              }}
+              className="mt-6 text-white/60 hover:text-white text-sm underline w-full text-center block"
+            >
+              ← Change email
+            </button>
           )}
         </div>
 
         {/* Footer */}
         <div className="mt-8 text-center">
-          <p className="text-white/60 text-sm">
-            {isEnroll ? "Already have an account? " : "Don't have an account? "}
+          <p className="text-white/50 text-sm">
+            {isEnroll ? "Already have an account? " : "New to FileSphere? "}
             <a
               href={isEnroll ? "/login" : "/enroll"}
-              className="text-white hover:text-white/80 font-medium transition-colors"
+              className="text-white font-medium hover:underline"
             >
-              {isEnroll ? "Sign in" : "Sign up"}
+              {isEnroll ? "Sign in" : "Create account"}
             </a>
           </p>
         </div>

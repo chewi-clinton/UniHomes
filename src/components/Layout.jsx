@@ -4,14 +4,15 @@ import { Outlet, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import {
   FolderOpen,
-  HardDrive,
   Users,
+  HardDrive,
   ShoppingCart,
   Menu,
   X,
 } from "lucide-react";
 import Header from "./Header";
-import StorageProgress from "./StorageProgress"; // Your storage indicator component
+import StorageProgress from "./StorageProgress";
+import logo from "../img/logo.png"; // Your FileSphere logo
 
 const Layout = () => {
   const location = useLocation();
@@ -29,7 +30,6 @@ const Layout = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header with user menu, search, theme toggle */}
       <Header onMenuClick={() => setSidebarOpen(true)} />
 
       <div className="flex flex-1">
@@ -48,12 +48,19 @@ const Layout = () => {
           }`}
         >
           <div className="flex flex-col h-full">
-            {/* Logo */}
+            {/* Logo + Brand — Clean & Minimal */}
             <div className="p-6 border-b border-border">
               <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">
-                  CloudStore
-                </h1>
+                <div className="flex items-center space-x-3">
+                  <img
+                    src={logo}
+                    alt="FileSphere"
+                    className="w-10 h-10 object-contain"
+                  />
+                  <h1 className="text-2xl font-bold text-foreground">
+                    FileSphere
+                  </h1>
+                </div>
                 <button
                   onClick={() => setSidebarOpen(false)}
                   className="lg:hidden p-1 hover:bg-accent rounded"
@@ -77,20 +84,20 @@ const Layout = () => {
                     key={item.path}
                     to={item.path}
                     onClick={() => setSidebarOpen(false)}
-                    className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                    className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors font-medium ${
                       isActive
-                        ? "bg-primary text-primary-foreground"
+                        ? "bg-primary text-primary-foreground shadow-sm"
                         : "hover:bg-accent text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     <Icon className="w-5 h-5" />
-                    <span className="font-medium">{item.label}</span>
+                    <span>{item.label}</span>
                   </Link>
                 );
               })}
             </nav>
 
-            {/* Storage Quota Progress Bar — at the bottom */}
+            {/* Storage Progress */}
             <div className="p-4 border-t border-border">
               <StorageProgress />
             </div>

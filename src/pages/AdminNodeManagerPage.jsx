@@ -228,13 +228,12 @@ const AdminNodeManagerPage = () => {
         setDeleteTarget(null);
         loadNodes();
       } else {
-        // Show error with option to force delete
         if (data.message && data.message.includes("contains") && !force) {
           const forceConfirm = confirm(
-            `${data.message}\n\n⚠️  WARNING: Force deleting will cause DATA LOSS!\n\nContinue anyway?`
+            `${data.message}\n\nWARNING: Force deleting will cause DATA LOSS!\n\nContinue anyway?`
           );
           if (forceConfirm) {
-            handleDeleteNode(true); // Retry with force
+            handleDeleteNode(true);
           }
         } else {
           alert(data.message || "Failed to delete node");
@@ -249,12 +248,12 @@ const AdminNodeManagerPage = () => {
   if (loading && nodes.length === 0) {
     return (
       <div className="p-6">
-        <div className="h-8 bg-gray-200 rounded w-1/4 mb-6 animate-pulse"></div>
+        <div className="h-8 bg-muted rounded w-1/4 mb-6 animate-pulse"></div>
         <div className="space-y-4">
           {[1, 2, 3].map((i) => (
             <div
               key={i}
-              className="h-32 bg-gray-200 rounded animate-pulse"
+              className="h-32 bg-muted/50 rounded animate-pulse"
             ></div>
           ))}
         </div>
@@ -267,21 +266,21 @@ const AdminNodeManagerPage = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold mb-2">Storage Node Management</h1>
-          <p className="text-gray-600">
+          <p className="text-muted-foreground">
             Full control over all storage nodes in the system
           </p>
         </div>
         <div className="flex items-center space-x-3">
           <button
             onClick={loadNodes}
-            className="flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            className="flex items-center px-4 py-2 bg-muted hover:bg-muted/80 rounded-lg transition-colors"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </button>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors"
+            className="flex items-center px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors"
           >
             <Plus className="w-4 h-4 mr-2" />
             Create Node
@@ -289,30 +288,18 @@ const AdminNodeManagerPage = () => {
         </div>
       </div>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start space-x-3">
-        <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-        <div className="text-sm text-blue-900">
-          <p className="font-medium mb-1">Advanced Capacity Tracking</p>
-          <p>
-            <strong>Total Capacity</strong> = All nodes (reduces only when
-            deleted) |<strong> Usable Capacity</strong> = Online nodes only
-            (reduces when offline/paused)
-          </p>
-        </div>
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <div className="bg-white border rounded-lg p-6">
+        <div className="bg-card border rounded-lg p-6">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-600">Total Nodes</span>
-            <Server className="w-4 h-4 text-gray-600" />
+            <span className="text-sm text-muted-foreground">Total Nodes</span>
+            <Server className="w-4 h-4 text-muted-foreground" />
           </div>
           <p className="text-2xl font-bold">{nodes.length}</p>
         </div>
 
-        <div className="bg-white border rounded-lg p-6">
+        <div className="bg-card border rounded-lg p-6">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-600">Online</span>
+            <span className="text-sm text-muted-foreground">Online</span>
             <CheckCircle className="w-4 h-4 text-green-500" />
           </div>
           <p className="text-2xl font-bold text-green-500">
@@ -320,9 +307,9 @@ const AdminNodeManagerPage = () => {
           </p>
         </div>
 
-        <div className="bg-white border rounded-lg p-6">
+        <div className="bg-card border rounded-lg p-6">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-600">Offline</span>
+            <span className="text-sm text-muted-foreground">Offline</span>
             <AlertCircle className="w-4 h-4 text-red-500" />
           </div>
           <p className="text-2xl font-bold text-red-500">
@@ -330,42 +317,44 @@ const AdminNodeManagerPage = () => {
           </p>
         </div>
 
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-6">
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/50 dark:to-blue-900/50 border border-blue-200 dark:border-blue-800 rounded-lg p-6">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-blue-900 font-medium">
+            <span className="text-sm font-medium text-blue-900 dark:text-blue-300">
               Total Capacity
             </span>
-            <Database className="w-4 h-4 text-blue-600" />
+            <Database className="w-4 h-4 text-blue-600 dark:text-blue-400" />
           </div>
-          <p className="text-2xl font-bold text-blue-900">
+          <p className="text-2xl font-bold text-blue-900 dark:text-blue-300">
             {formatBytes(capacityMetrics?.total_capacity || 0)}
           </p>
-          <p className="text-xs text-blue-700 mt-1">
+          <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
             All nodes (incl. offline)
           </p>
         </div>
 
-        <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-6">
+        <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950/50 dark:to-green-900/50 border border-green-200 dark:border-green-800 rounded-lg p-6">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-green-900 font-medium">
+            <span className="text-sm font-medium text-green-900 dark:text-green-300">
               Usable Capacity
             </span>
-            <Activity className="w-4 h-4 text-green-600" />
+            <Activity className="w-4 h-4 text-green-600 dark:text-green-400" />
           </div>
-          <p className="text-2xl font-bold text-green-900">
+          <p className="text-2xl font-bold text-green-900 dark:text-green-300">
             {formatBytes(capacityMetrics?.usable_capacity || 0)}
           </p>
-          <p className="text-xs text-green-700 mt-1">Online nodes only</p>
+          <p className="text-xs text-green-700 dark:text-green-400 mt-1">
+            Online nodes only
+          </p>
         </div>
       </div>
 
-      <div className="bg-white border rounded-lg">
-        <div className="p-6 border-b">
+      <div className="bg-card border rounded-lg">
+        <div className="p-6 border-b border-border">
           <h2 className="text-lg font-semibold">Storage Nodes</h2>
         </div>
-        <div className="divide-y">
+        <div className="divide-y divide-border">
           {nodes.length === 0 ? (
-            <div className="p-12 text-center text-gray-600">
+            <div className="p-12 text-center text-muted-foreground">
               <Server className="w-12 h-12 mx-auto mb-4 opacity-50" />
               <p className="text-lg mb-2">No storage nodes yet</p>
               <p className="text-sm">Create your first node to get started</p>
@@ -374,7 +363,7 @@ const AdminNodeManagerPage = () => {
             nodes.map((node) => (
               <div
                 key={node.node_id}
-                className="p-6 hover:bg-gray-50 transition-colors"
+                className="p-6 hover:bg-muted/50 transition-colors"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start space-x-4 flex-1">
@@ -387,35 +376,35 @@ const AdminNodeManagerPage = () => {
                           {node.node_id}
                         </h3>
                         <span
-                          className={`px-2 py-1 text-xs rounded-full ${
+                          className={`px-2 py-1 text-xs rounded-full font-medium ${
                             node.status === "online"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-red-100 text-red-700"
+                              ? "bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300"
+                              : "bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300"
                           }`}
                         >
                           {node.status}
                         </span>
                         {node.chunk_count > 0 && (
-                          <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700">
+                          <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-300 font-medium">
                             {node.chunk_count} chunks
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-gray-600 mb-3">
+                      <p className="text-sm text-muted-foreground mb-3">
                         {node.host}:{node.port}
                       </p>
 
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-600">Storage</span>
+                          <span className="text-muted-foreground">Storage</span>
                           <span className="font-medium">
                             {formatBytes(node.storage_used)} /{" "}
                             {formatBytes(node.storage_capacity)}
                           </span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div className="w-full bg-muted rounded-full h-2">
                           <div
-                            className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                            className="bg-primary h-2 rounded-full transition-all duration-500"
                             style={{
                               width: `${
                                 node.storage_capacity > 0
@@ -427,12 +416,12 @@ const AdminNodeManagerPage = () => {
                             }}
                           />
                         </div>
-                        <div className="flex items-center justify-between text-xs text-gray-600">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
                           <span>{node.chunk_count} chunks</span>
                           <span>Health: {node.health_score.toFixed(0)}%</span>
                         </div>
                         {node.last_heartbeat && (
-                          <p className="text-xs text-gray-600">
+                          <p className="text-xs text-muted-foreground">
                             Last seen:{" "}
                             {new Date(node.last_heartbeat).toLocaleString()}
                           </p>
@@ -448,8 +437,8 @@ const AdminNodeManagerPage = () => {
                         disabled={operatingNodes.has(node.node_id)}
                         className={`p-2 rounded-lg transition-colors ${
                           operatingNodes.has(node.node_id)
-                            ? "text-gray-400 bg-gray-100 cursor-not-allowed"
-                            : "text-green-600 hover:bg-green-50"
+                            ? "text-muted-foreground bg-muted/50 cursor-not-allowed"
+                            : "text-green-600 hover:bg-green-500/10 dark:hover:bg-green-500/20"
                         }`}
                         title="Start Node"
                       >
@@ -465,8 +454,8 @@ const AdminNodeManagerPage = () => {
                         disabled={operatingNodes.has(node.node_id)}
                         className={`p-2 rounded-lg transition-colors ${
                           operatingNodes.has(node.node_id)
-                            ? "text-gray-400 bg-gray-100 cursor-not-allowed"
-                            : "text-yellow-600 hover:bg-yellow-50"
+                            ? "text-muted-foreground bg-muted/50 cursor-not-allowed"
+                            : "text-yellow-600 hover:bg-yellow-500/10 dark:hover:bg-yellow-500/20"
                         }`}
                         title="Stop Node"
                       >
@@ -482,8 +471,8 @@ const AdminNodeManagerPage = () => {
                       disabled={operatingNodes.has(node.node_id)}
                       className={`p-2 rounded-lg transition-colors ${
                         operatingNodes.has(node.node_id)
-                          ? "text-gray-400 bg-gray-100 cursor-not-allowed"
-                          : "text-red-600 hover:bg-red-50"
+                          ? "text-muted-foreground bg-muted/50 cursor-not-allowed"
+                          : "text-red-600 hover:bg-red-500/10 dark:hover:bg-red-500/20"
                       }`}
                       title="Delete Node"
                     >
@@ -497,75 +486,51 @@ const AdminNodeManagerPage = () => {
         </div>
       </div>
 
-      {/* Create Node Modal */}
+      {/* Modals - now fully dark mode compatible */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white border rounded-lg p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-card border rounded-lg p-6 w-full max-w-md shadow-2xl">
             <h2 className="text-xl font-bold mb-4">Create New Storage Node</h2>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Node ID
-                </label>
-                <input
-                  type="text"
-                  value={newNode.node_id}
-                  onChange={(e) =>
-                    setNewNode({ ...newNode, node_id: e.target.value })
-                  }
-                  placeholder="e.g., node1"
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Host</label>
-                <input
-                  type="text"
-                  value={newNode.host}
-                  onChange={(e) =>
-                    setNewNode({ ...newNode, host: e.target.value })
-                  }
-                  placeholder="localhost"
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Port</label>
-                <input
-                  type="number"
-                  value={newNode.port}
-                  onChange={(e) =>
-                    setNewNode({ ...newNode, port: e.target.value })
-                  }
-                  placeholder="e.g., 9001"
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Storage (GB)
-                </label>
-                <input
-                  type="number"
-                  value={newNode.storage_gb}
-                  onChange={(e) =>
-                    setNewNode({ ...newNode, storage_gb: e.target.value })
-                  }
-                  placeholder="e.g., 2"
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+              {["node_id", "host", "port", "storage_gb"].map((field) => (
+                <div key={field}>
+                  <label className="block text-sm font-medium mb-2 capitalize">
+                    {field.replace("_", " ")}
+                  </label>
+                  <input
+                    type={
+                      field.includes("port") || field.includes("storage")
+                        ? "number"
+                        : "text"
+                    }
+                    value={newNode[field]}
+                    onChange={(e) =>
+                      setNewNode({ ...newNode, [field]: e.target.value })
+                    }
+                    placeholder={
+                      field === "node_id"
+                        ? "e.g., node1"
+                        : field === "port"
+                        ? "9001"
+                        : field === "storage_gb"
+                        ? "2"
+                        : "localhost"
+                    }
+                    className="w-full px-3 py-2 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                  />
+                </div>
+              ))}
             </div>
             <div className="flex space-x-3 mt-6">
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100 transition-colors"
+                className="flex-1 px-4 py-2 border rounded-lg hover:bg-muted transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleCreateNode}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
               >
                 Create Node
               </button>
@@ -574,17 +539,16 @@ const AdminNodeManagerPage = () => {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
       {showDeleteModal && deleteTarget && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white border rounded-lg p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-card border rounded-lg p-6 w-full max-w-md shadow-2xl">
             <div className="flex items-start space-x-3 mb-4">
               <AlertCircle className="w-6 h-6 text-red-500 flex-shrink-0 mt-1" />
               <div>
-                <h2 className="text-xl font-bold text-red-900 mb-2">
+                <h2 className="text-xl font-bold text-red-900 dark:text-red-400 mb-2">
                   Delete Node {deleteTarget.nodeId}?
                 </h2>
-                <div className="text-sm text-gray-700 space-y-2">
+                <div className="text-sm text-foreground space-y-2">
                   <p>This will permanently:</p>
                   <ul className="list-disc list-inside space-y-1 ml-2">
                     <li>Stop the node process if running</li>
@@ -592,15 +556,17 @@ const AdminNodeManagerPage = () => {
                     <li>Delete storage directory</li>
                     <li>Reduce total capacity</li>
                     {deleteTarget.chunkCount > 0 && (
-                      <li className="text-red-600 font-medium">
+                      <li className="text-red-600 dark:text-red-400 font-medium">
                         Delete {deleteTarget.chunkCount} chunks (DATA LOSS!)
                       </li>
                     )}
                   </ul>
                   {deleteTarget.chunkCount > 0 && (
-                    <div className="bg-red-50 border border-red-200 rounded p-3 mt-3">
-                      <p className="font-medium text-red-900">⚠️ Warning:</p>
-                      <p className="text-red-800">
+                    <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded p-3 mt-3">
+                      <p className="font-medium text-red-900 dark:text-red-400">
+                        Warning:
+                      </p>
+                      <p className="text-red-800 dark:text-red-300">
                         This node contains {deleteTarget.chunkCount} chunks.
                         Deleting will cause permanent data loss!
                       </p>
@@ -615,7 +581,7 @@ const AdminNodeManagerPage = () => {
                   setShowDeleteModal(false);
                   setDeleteTarget(null);
                 }}
-                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100 transition-colors"
+                className="flex-1 px-4 py-2 border rounded-lg hover:bg-muted transition-colors"
               >
                 Cancel
               </button>

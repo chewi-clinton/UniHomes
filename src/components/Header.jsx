@@ -1,3 +1,4 @@
+// src/components/Header.jsx
 import React, { useState, useEffect } from "react";
 import {
   Menu,
@@ -14,15 +15,13 @@ import { useTheme } from "../contexts/ThemeContext";
 import { useParams, useNavigate } from "react-router-dom";
 import { filesAPI } from "../services/api";
 import { toast } from "sonner";
+import logo from "../img/logo.png"; // Your FileSphere logo
 
 const Header = ({ onMenuClick, onSearch }) => {
-  // State for search
   const [searchQuery, setSearchQuery] = useState("");
   const [allFiles, setAllFiles] = useState([]);
   const [loading, setLoading] = useState(false);
-
-  // State for user menu dropdown
-  const [showUserMenu, setShowUserMenu] = useState(false); // This was missing!
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   const { folderId } = useParams();
   const { user, logout } = useAuth();
@@ -58,7 +57,7 @@ const Header = ({ onMenuClick, onSearch }) => {
         }));
         const combined = [...folders, ...files];
         setAllFiles(combined);
-        setSearchQuery(""); // Clear search on folder change
+        setSearchQuery("");
         onSearch?.(combined);
       }
     } catch (err) {
@@ -69,7 +68,6 @@ const Header = ({ onMenuClick, onSearch }) => {
     }
   };
 
-  // Filter files when search query changes
   useEffect(() => {
     if (!searchQuery.trim()) {
       onSearch?.(allFiles);
@@ -87,10 +85,11 @@ const Header = ({ onMenuClick, onSearch }) => {
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+    <header className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
       <div className="flex items-center justify-between px-4 py-3">
-        {/* Left side */}
+        {/* Left: Logo + Search */}
         <div className="flex items-center space-x-4">
+          {/* Mobile Menu */}
           <button
             onClick={onMenuClick}
             className="lg:hidden p-2 rounded-lg hover:bg-accent transition-colors"
@@ -98,15 +97,24 @@ const Header = ({ onMenuClick, onSearch }) => {
             <Menu className="w-5 h-5" />
           </button>
 
-          {/* Search Input */}
+          {/* Logo + Brand */}
+          <div className="flex items-center space-x-3">
+            <img
+              src={logo}
+              alt="FileSphere"
+              className="w-8 h-8 object-contain rounded"
+            />
+            <h1 className="hidden md:block text-xl font-bold">FileSphere</h1>
+          </div>
         </div>
 
-        {/* Right side */}
+        {/* Right: Theme + User Menu */}
         <div className="flex items-center space-x-3">
-          {/* Theme toggle */}
+          {/* Theme Toggle */}
           <button
             onClick={toggleTheme}
             className="p-2 rounded-lg hover:bg-accent transition-colors"
+            aria-label="Toggle theme"
           >
             {theme === "light" ? (
               <Moon className="w-5 h-5" />
@@ -115,7 +123,7 @@ const Header = ({ onMenuClick, onSearch }) => {
             )}
           </button>
 
-          {/* User menu */}
+          {/* User Menu */}
           <div className="relative">
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
@@ -127,11 +135,10 @@ const Header = ({ onMenuClick, onSearch }) => {
               </span>
             </button>
 
-            {/* Dropdown */}
             {showUserMenu && (
-              <div className="absolute right-0 mt-2 w-48 bg-popover border rounded-lg shadow-lg py-2 z-50">
-                <div className="px-4 py-2 border-b">
-                  <p className="text-sm font-medium">{user?.name}</p>
+              <div className="absolute right-0 mt-2 w-56 bg-popover border border-border rounded-lg shadow-lg py-2 z-50">
+                <div className="px-4 py-3 border-b border-border">
+                  <p className="text-sm font-semibold">{user?.name}</p>
                   <p className="text-xs text-muted-foreground">{user?.email}</p>
                 </div>
 
@@ -140,7 +147,7 @@ const Header = ({ onMenuClick, onSearch }) => {
                     setShowUserMenu(false);
                     navigate("/storage");
                   }}
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center space-x-2"
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center space-x-3"
                 >
                   <Settings className="w-4 h-4" />
                   <span>Storage</span>
@@ -152,17 +159,17 @@ const Header = ({ onMenuClick, onSearch }) => {
                       setShowUserMenu(false);
                       navigate("/admin");
                     }}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center space-x-2"
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center space-x-3"
                   >
                     <User className="w-4 h-4" />
                     <span>Admin Panel</span>
                   </button>
                 )}
 
-                <div className="border-t mt-2 pt-2">
+                <div className="border-t border-border mt-2 pt-2">
                   <button
                     onClick={handleLogout}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center space-x-2 text-destructive"
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center space-x-3 text-destructive"
                   >
                     <LogOut className="w-4 h-4" />
                     <span>Sign out</span>

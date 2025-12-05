@@ -4,50 +4,38 @@ import { useAuth } from "./contexts/AuthContext";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import StoragePage from "./pages/StoragePage";
-import PaymentPage from "./pages/PaymentPage"; // NEW
+import PaymentPage from "./pages/PaymentPage";
 import AdminPage from "./pages/AdminPage";
 import AdminAuthPage from "./pages/AdminAuthPage";
 import AdminNodeManagerPage from "./pages/AdminNodeManagerPage";
-import AdminPaymentsPage from "./pages/AdminPaymentsPage"; // NEW
+import AdminPaymentsPage from "./pages/AdminPaymentsPage";
 import NotFoundPage from "./pages/NotFoundPage";
-import Layout from "./components/Layout";
 import SharedFilesPage from "./pages/SharedFilesPage";
 import LoadingSpinner from "./components/LoadingSpinner";
 
-// Protected Route Component for regular users
+// Layouts
+import Layout from "./components/Layout"; // User layout (with Header, Sidebar)
+import AdminLayout from "./components/AdminLayout"; // New admin layout (with AdminHeader)
+
+// Protected Route for regular users
 const ProtectedRoute = () => {
   const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <LoadingSpinner />
       </div>
     );
   }
 
-  return isAuthenticated ? <Outlet /> : <Navigate to="/login" />;
+  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
 };
 
-// Admin Protected Route Component - standalone, doesn't need user auth
+// Admin Protected Route (independent of user auth)
 const AdminProtectedRoute = () => {
   const adminKey = sessionStorage.getItem("adminKey");
-
-  // If no admin key, redirect to admin auth page
-  if (!adminKey) {
-    return <Navigate to="/admin/auth" replace />;
-  }
-
-  return <Outlet />;
-};
-
-// Simple Admin Layout (without user auth requirements)
-const AdminLayout = () => {
-  return (
-    <div className="min-h-screen">
-      <Outlet />
-    </div>
-  );
+  return adminKey ? <Outlet /> : <Navigate to="/admin/auth" replace />;
 };
 
 function App() {
@@ -58,37 +46,31 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/enroll" element={<LoginPage isEnroll={true} />} />
 
-        {/* Admin Authentication Route (public - but checks for existing auth) */}
+        {/* Admin Authentication (public but protected by key check) */}
         <Route path="/admin/auth" element={<AdminAuthPage />} />
 
         {/* Protected User Routes */}
         <Route element={<ProtectedRoute />}>
           <Route element={<Layout />}>
-            <Route path="/shared" element={<SharedFilesPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/dashboard/:folderId" element={<DashboardPage />} />
+            <Route path="/shared" element={<SharedFilesPage />} />
             <Route path="/storage" element={<StoragePage />} />
-            <Route path="/purchase" element={<PaymentPage />} /> {/* NEW */}
+            <Route path="/purchase" element={<PaymentPage />} />
           </Route>
         </Route>
 
-        {/* Admin Routes - separate from user auth */}
+        {/* Admin Section - completely separate layout & auth */}
         <Route element={<AdminProtectedRoute />}>
           <Route element={<AdminLayout />}>
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/admin/nodes" element={<AdminNodeManagerPage />} />
-            <Route
-              path="/admin/payments"
-              element={<AdminPaymentsPage />}
-            />{" "}
-            {/* NEW */}
+            <Route path="/admin/payments" element={<AdminPaymentsPage />} />
           </Route>
         </Route>
 
-        {/* Default redirect */}
-        <Route path="/" element={<Navigate to="/dashboard" />} />
-
-        {/* 404 */}
+        {/* Default Redirects */}
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </div>

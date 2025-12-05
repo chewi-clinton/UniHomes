@@ -246,25 +246,11 @@ const AdminPage = () => {
         </div>
         <div className="flex items-center space-x-3">
           <button
-            onClick={() => navigate("/admin/nodes")}
-            className="flex items-center px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors"
-          >
-            <Settings className="w-4 h-4 mr-2" />
-            Manage Nodes
-          </button>
-          <button
             onClick={loadAdminData}
             className="flex items-center px-4 py-2 bg-accent hover:bg-accent/80 rounded-lg transition-colors"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
-          </button>
-          <button
-            onClick={handleLogout}
-            className="flex items-center px-4 py-2 bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-lg transition-colors"
-          >
-            <LogOut className="w-4 h-4 mr-2" />
-            Logout
           </button>
         </div>
       </div>
