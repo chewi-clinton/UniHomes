@@ -303,7 +303,7 @@ def create_node():
 
 @admin_bp.route('/nodes/<node_id>/start', methods=['POST'])
 def start_node(node_id):
-    """Start a storage node"""
+    """Start a storage node - FIXED with better process detection"""
     is_valid, message = verify_admin_key(request)
     if not is_valid:
         return error_response(message), 401
@@ -317,14 +317,35 @@ def start_node(node_id):
         return error_response("Missing required fields: port, storage_gb"), 400
     
     try:
+        # IMPROVED: Better process detection
         existing_pid = read_pid_file(node_id)
-        if existing_pid and is_process_running(existing_pid):
-            return error_response(f"Node {node_id} is already running (PID: {existing_pid})"), 400
         
+        # First check PID file
+        if existing_pid:
+            if is_process_running(existing_pid):
+                # Process is actually running
+                print(f"[ADMIN] Node {node_id} already running with PID {existing_pid}")
+                return error_response(
+                    f"Node {node_id} is already running (PID: {existing_pid}). "
+                    f"Stop it first or use the admin panel to force kill."
+                ), 400
+            else:
+                # PID file exists but process is dead - clean it up
+                print(f"[ADMIN] Cleaning up stale PID file for {node_id}")
+                delete_pid_file(node_id)
+        
+        # Double check by scanning all processes
         running_pid = find_node_process(node_id)
         if running_pid:
+            print(f"[ADMIN] Found running process for {node_id}: PID {running_pid}")
             write_pid_file(node_id, running_pid)
-            return error_response(f"Node {node_id} is already running (PID: {running_pid})"), 400
+            return error_response(
+                f"Node {node_id} is already running (PID: {running_pid}). "
+                f"Stop it first before starting again."
+            ), 400
+        
+        # At this point, we're sure the node is NOT running
+        print(f"[ADMIN] Starting node {node_id}...")
         
         cwd = Path(os.getcwd())
         if cwd.name == 'rest_api':
@@ -342,35 +363,51 @@ def start_node(node_id):
         for path in possible_paths:
             if path.exists():
                 node_script = str(path.absolute())
+                print(f"[ADMIN] Found node script: {node_script}")
                 break
         
         if not node_script:
             return error_response("Storage node script not found"), 500
         
         cmd = [sys.executable, node_script, node_id, host, str(port), str(storage_gb)]
+        print(f"[ADMIN] Executing: {' '.join(cmd)}")
         
+        # Start the process
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             cwd=str(project_root),
-            start_new_session=True
+            start_new_session=True  # Important: detach from parent
         )
         
+        # Write PID immediately
         write_pid_file(node_id, process.pid)
+        print(f"[ADMIN] Process started with PID: {process.pid}")
+        
+        # Wait a bit to ensure it started properly
         time.sleep(3)
         
+        # Verify it's still running
         if not is_process_running(process.pid):
             delete_pid_file(node_id)
-            return error_response("Node failed to start"), 500
+            # Try to get error output
+            try:
+                _, stderr = process.communicate(timeout=1)
+                error_msg = stderr.decode() if stderr else "Unknown error"
+            except:
+                error_msg = "Process died immediately after start"
+            
+            print(f"[ADMIN] ✗ Node failed to start: {error_msg}")
+            return error_response(f"Node failed to start: {error_msg}"), 500
         
-        # Node will update metrics when it sends heartbeat
-        print(f"[ADMIN] ✓ Node {node_id} started (PID: {process.pid})")
+        print(f"[ADMIN] ✓ Node {node_id} started successfully (PID: {process.pid})")
         
         return success_response({
             'node_id': node_id,
             'pid': process.pid,
-            'status': 'started'
+            'status': 'started',
+            'message': f'Node {node_id} is starting. It will appear online after sending heartbeat.'
         }, message=f"Node {node_id} started successfully")
     
     except Exception as e:
@@ -379,35 +416,55 @@ def start_node(node_id):
         traceback.print_exc()
         return error_response(f"Failed to start node: {str(e)}"), 500
 
+
 @admin_bp.route('/nodes/<node_id>/stop', methods=['POST'])
 def stop_node(node_id):
-    """Stop a running storage node"""
+    """Stop a running storage node - IMPROVED"""
     is_valid, message = verify_admin_key(request)
     if not is_valid:
         return error_response(message), 401
     
     try:
+        print(f"[ADMIN] Attempting to stop node {node_id}")
+        
+        # Try to get PID from file first
         pid = read_pid_file(node_id)
+        
+        # If no PID file, scan for running process
         if not pid:
+            print(f"[ADMIN] No PID file found, scanning for process...")
             pid = find_node_process(node_id)
             if pid:
+                print(f"[ADMIN] Found running process: PID {pid}")
                 write_pid_file(node_id, pid)
         
         if not pid:
-            return error_response(f"Node {node_id} is not running"), 400
-        
-        if not is_process_running(pid):
+            print(f"[ADMIN] ✗ No process found for node {node_id}")
+            # Clean up just in case
             delete_pid_file(node_id)
-            return error_response(f"Node {node_id} process not found"), 400
+            return error_response(
+                f"Node {node_id} is not running. No process found."
+            ), 400
         
+        # Verify process is actually running
+        if not is_process_running(pid):
+            print(f"[ADMIN] Process {pid} is not running (stale PID)")
+            delete_pid_file(node_id)
+            return error_response(
+                f"Node {node_id} process is not running (stale PID: {pid})"
+            ), 400
+        
+        print(f"[ADMIN] Stopping process {pid}...")
+        
+        # Kill the process
         if kill_process(pid):
             delete_pid_file(node_id)
             
-            # Recalculate usable capacity
+            # Recalculate capacity
             metrics = calculate_capacity_metrics()
             
-            print(f"[ADMIN] ✓ Node {node_id} stopped")
-            print(f"[ADMIN] Usable Capacity reduced to: {metrics['usable_capacity'] / (1024**3):.2f} GB")
+            print(f"[ADMIN] ✓ Node {node_id} stopped successfully")
+            print(f"[ADMIN] Usable Capacity: {metrics['usable_capacity'] / (1024**3):.2f} GB")
             
             return success_response({
                 'node_id': node_id,
@@ -419,7 +476,7 @@ def stop_node(node_id):
                 }
             }, message=f"Node {node_id} stopped successfully")
         else:
-            return error_response(f"Failed to stop node {node_id}"), 500
+            return error_response(f"Failed to kill process {pid}"), 500
     
     except Exception as e:
         print(f"[ERROR] Failed to stop node: {e}")
@@ -427,6 +484,65 @@ def stop_node(node_id):
         traceback.print_exc()
         return error_response(f"Failed to stop node: {str(e)}"), 500
 
+
+# ADD THIS NEW ENDPOINT - Force Kill
+@admin_bp.route('/nodes/<node_id>/force-kill', methods=['POST'])
+def force_kill_node(node_id):
+    """Force kill a node process - for when normal stop doesn't work"""
+    is_valid, message = verify_admin_key(request)
+    if not is_valid:
+        return error_response(message), 401
+    
+    try:
+        print(f"[ADMIN] FORCE KILL requested for node {node_id}")
+        
+        # Get PID from file
+        pid = read_pid_file(node_id)
+        
+        # Also scan for process
+        scanned_pid = find_node_process(node_id)
+        
+        killed_pids = []
+        
+        # Try to kill both if found
+        if pid and is_process_running(pid):
+            print(f"[ADMIN] Force killing PID from file: {pid}")
+            try:
+                process = psutil.Process(pid)
+                process.kill()  # SIGKILL - immediate termination
+                process.wait(timeout=5)
+                killed_pids.append(pid)
+            except:
+                pass
+        
+        if scanned_pid and scanned_pid != pid and is_process_running(scanned_pid):
+            print(f"[ADMIN] Force killing scanned PID: {scanned_pid}")
+            try:
+                process = psutil.Process(scanned_pid)
+                process.kill()
+                process.wait(timeout=5)
+                killed_pids.append(scanned_pid)
+            except:
+                pass
+        
+        # Clean up PID file
+        delete_pid_file(node_id)
+        
+        if killed_pids:
+            print(f"[ADMIN] ✓ Force killed PIDs: {killed_pids}")
+            return success_response({
+                'node_id': node_id,
+                'killed_pids': killed_pids,
+                'status': 'force_killed'
+            }, message=f"Node {node_id} force killed successfully")
+        else:
+            return error_response(f"No running process found for node {node_id}"), 400
+    
+    except Exception as e:
+        print(f"[ERROR] Force kill failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return error_response(f"Force kill failed: {str(e)}"), 500
 @admin_bp.route('/nodes/<node_id>', methods=['DELETE'])
 def delete_node(node_id):
     """
