@@ -48,20 +48,15 @@ def fix_grpc_imports():
     """Fix absolute imports to relative imports in generated grpc file"""
     grpc_file = os.path.join('generated', 'cloud_storage_pb2_grpc.py')
     
-<<<<<<< HEAD
     if not os.path.exists(grpc_file):
         print("\n⚠ Warning: cloud_storage_pb2_grpc.py not found")
         return
     
     try:
-=======
-    if os.path.exists(grpc_file):
->>>>>>> Rest_api
         with open(grpc_file, 'r') as f:
             content = f.read()
         
         # Replace absolute import with relative import
-<<<<<<< HEAD
         original_import = 'import cloud_storage_pb2 as cloud__storage__pb2'
         fixed_import = 'from . import cloud_storage_pb2 as cloud__storage__pb2'
         
@@ -80,17 +75,6 @@ def fix_grpc_imports():
     except Exception as e:
         print(f"\n✗ Error fixing imports: {e}")
         sys.exit(1)
-=======
-        content = content.replace(
-            'import cloud_storage_pb2 as cloud__storage__pb2',
-            'from . import cloud_storage_pb2 as cloud__storage__pb2'
-        )
-        
-        with open(grpc_file, 'w') as f:
-            f.write(content)
-        
-        print("\n✓ Fixed imports in cloud_storage_pb2_grpc.py")
->>>>>>> Rest_api
 
 if __name__ == '__main__':
     generate_proto()
