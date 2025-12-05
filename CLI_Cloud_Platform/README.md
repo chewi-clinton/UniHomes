@@ -1,524 +1,1019 @@
-# Cloud Storage Platform - Setup & Usage Guide
+CloudGrpc Storage Platform
+A distributed cloud storage system with integrated payment processing, built with gRPC and Python. Features include file chunking, distributed storage across multiple nodes, mobile money payments (MTN MoMo, Orange Money), and real-time administrative monitoring.
+![python](image-6.png)
+![grpc](image-7.png)
+![postgresql](image-8.png)
+![MIT](image-9.png)
 
-## Prerequisites
+📋 Table of Contents
 
-- Python 3.8+
-- PostgreSQL 12+
-- Gmail account (for OTP)
+Features
+Architecture
+Prerequisites
+Installation
+Configuration
+Usage
+API Documentation
+Sequence Diagrams
+Project Structure
+Payment Integration
+Contributing
+License
 
-## Installation
+✨ Features
+Core Storage Features
 
-### 1. Install Dependencies
+Distributed File Storage: Files are split into chunks and distributed across multiple storage nodes
+Automatic Replication: Configurable replication factor for data redundancy
+Dynamic Storage Allocation: Storage capacity grows automatically as nodes are added
+File Sharing: Share files with other users with configurable permissions
+Folder Organization: Organize files in hierarchical folder structures
+Soft Delete: Files can be moved to trash before permanent deletion
 
-```bash
-pip install grpcio grpcio-tools sqlalchemy psycopg2-binary python-dotenv
-```
+Security & Authentication
 
-### 2. Setup PostgreSQL Database
+OTP-Based Authentication: Email-based one-time password verification
+Session Management: Secure session tokens with automatic expiration
+User Isolation: Each user's data is completely isolated
 
-```bash
-# Login to PostgreSQL
-sudo -u postgres psql
+Payment System
 
-# Create database and user
+Mobile Money Integration: Support for MTN Mobile Money and Orange Money (Cameroon)
+Campay API: Integrated payment gateway for Cameroon
+Flexible Storage Tiers: Multiple storage packages from 250MB to 2GB
+Payment History: Complete transaction tracking and history
+Demo Mode: Test payments without real transactions
+
+Administration
+
+Real-time Monitoring: Live event streaming for system activities
+System Statistics: Comprehensive dashboard showing storage, users, and nodes
+Node Health Tracking: Automatic detection of offline nodes
+Payment Analytics: Revenue and transaction statistics
+
+🏗 Architecture
+System Components
+┌─────────────────────────────────────────────────────────────┐
+│ Client Applications │
+│ (CLI Client, Admin Monitor, Payment Client) │
+└────────────────────┬────────────────────────────────────────┘
+│ gRPC
+▼
+┌─────────────────────────────────────────────────────────────┐
+│ Cloud Gateway Server │
+│ • Authentication Service • Payment Service │
+│ • File Service • Storage Service │
+│ • Admin Service • Node Service │
+└────────────┬───────────────────────────┬────────────────────┘
+│ │
+│ gRPC │ PostgreSQL
+▼ ▼
+┌────────────────────────┐ ┌──────────────────────┐
+│ Storage Nodes │ │ Database │
+│ • node_storage_1 │ │ • Users & Sessions │
+│ • node_storage_2 │ │ • Files & Chunks │
+│ • node_storage_3 │ │ • Storage Nodes │
+│ • node_storage_N │ │ • Payments │
+└────────────────────────┘ └──────────────────────┘
+Data Flow
+
+Upload Flow: Client → Gateway → Chunk Distributor → Storage Nodes
+Download Flow: Client → Gateway → Chunk Retriever → Storage Nodes
+Payment Flow: Client → Gateway → Payment Manager → Campay API
+
+📦 Prerequisites
+
+Python 3.8 or higher
+PostgreSQL 13 or higher
+pip (Python package manager)
+Gmail account (for OTP emails)
+Campay account (for payments) - Optional for demo mode
+
+🚀 Installation
+
+1. Clone the Repository
+   bashgit clone https://github.com/yourusername/cloudgrpc-storage.git
+   cd cloudgrpc-storage
+2. Create Virtual Environment
+   bashpython -m venv venv
+
+# Windows
+
+venv\Scripts\activate
+
+# macOS/Linux
+
+source venv/bin/activate 3. Install Dependencies
+bashpip install -r requirements.txt 4. Set Up PostgreSQL Database
+sql-- Connect to PostgreSQL
+psql -U postgres
+
+-- Create database
 CREATE DATABASE cloud_storage;
-CREATE USER cloud_user WITH PASSWORD 'your_secure_password';
-GRANT ALL PRIVILEGES ON DATABASE cloud_storage TO cloud_user;
-\q
-```
 
-### 3. Configure Environment Variables
-
-Create a `.env` file in your project root:
-
-```properties
-# PostgreSQL Configuration
+-- Create user (optional)
+CREATE USER cloud_admin WITH PASSWORD 'your_secure_password';
+GRANT ALL PRIVILEGES ON DATABASE cloud_storage TO cloud_admin; 5. Configure Environment Variables
+Create a .env file in the project root:
+env# Database Configuration
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=cloud_storage
-DB_USER=cloud_user
-DB_PASSWORD=your_secure_password
-
-# Gmail OTP Configuration
-GMAIL_USER=your_email@gmail.com
-GMAIL_APP_PASSWORD=your_16_char_app_password
+DB_USER=postgres
+DB_PASSWORD=your_database_password
 
 # Server Configuration
+
 GRPC_SERVER_HOST=localhost
 GRPC_SERVER_PORT=50051
 
 # Admin Configuration
-ADMIN_KEY=change_this_to_a_secure_random_key
 
-# User Storage Configuration
-PER_USER_STORAGE_GB=1
+ADMIN_KEY=your_secure_admin_key_here
+
+# Gmail Configuration (for OTP)
+
+GMAIL_USER=your_email@gmail.com
+GMAIL_APP_PASSWORD=your_gmail_app_password
+
+# Campay Configuration (Payment Gateway)
+
+CAMPAY_APP_USERNAME=your_campay_username
+CAMPAY_APP_PASSWORD=your_campay_password
+CAMPAY_BASE_URL=https://demo.campay.net/api # Use demo URL for testing
+Getting Gmail App Password:
+
+Enable 2-factor authentication on your Google account
+Go to Google Account → Security → 2-Step Verification → App passwords
+Generate new app password for "Mail"
+Use this 16-character password in .env
+
+6. Generate Protocol Buffers
+   bashpython generate_proto.py
+   This creates the gRPC interfaces in the generated/ directory.
+7. Initialize Database
+   bash# Create all database tables
+   python -c "from db.database import init_database; init_database()"
+
+# Create payment tiers
+
+python db/init_payment_tables.py
+
+⚙️ Configuration
+Storage Tiers
+Default storage tiers are created automatically. To modify them, edit db/init*payment_tables.py:
+pythondefault_tiers = [
+{
+'name': 'starter',
+'display_name': 'Starter Pack',
+'storage_bytes': 250 * 1024 \_ 1024, # 250 MB
+'price_xaf': 500, # 500 XAF
+'description': 'Perfect for light users'
+},
+
+# Add more tiers...
+
+]
+Node Configuration
+Storage nodes can be configured with custom:
+
+Storage capacity (GB)
+Host and port
+CPU cores
+
+Payment Demo Mode
+The system automatically detects Campay demo mode from the URL:
+
+Demo URL: https://demo.campay.net/api (max 10 XAF per transaction)
+Production URL: https://www.campay.net/api
+
+🎯 Usage
+Starting the System
+
+1. Start the Cloud Gateway Server
+   bashpython server/cloud_server.py
+
 ```
 
-### 4. Setup Gmail App Password
-
-1. Go to Google Account settings
-2. Enable 2-Factor Authentication
-3. Go to Security → App passwords
-4. Generate new app password for "Mail"
-5. Copy the 16-character password to `GMAIL_APP_PASSWORD` in `.env`
-
-### 5. Generate gRPC Code
-
-```bash
-python -m grpc_tools.protoc \
-    -I. \
-    --python_out=generated \
-    --grpc_python_out=generated \
-    cloud_storage.proto
+Expected output:
 ```
 
-## Project Structure
-
-```
-cloud-storage/
-├── server/
-│   └── cloud_server.py         # Main gRPC server
-├── client/
-│   ├── cloud_client.py         # Client library
-│   └── cli.py                  # Command-line interface
-├── admin/
-│   └── admin_monitor.py        # Admin dashboard
-├── node/
-│   └── storage_node.py         # Storage node
-├── auth/
-│   └── gmail_otp.py            # OTP manager
-├── user/
-│   └── user_manager.py         # User management
-├── file/
-│   └── file_manager.py         # File operations
-├── storage/
-│   ├── node_manager.py         # Node management
-│   └── chunk_distributor.py   # Chunk distribution
-├── db/
-│   ├── models.py               # Database models
-│   └── database.py             # Database connection
-├── generated/                  # Generated gRPC code
-├── cloud_storage.proto         # Protocol buffer definition
-└── .env                        # Environment variables
-```
-
-## Usage
-
-### Starting the System
-
-#### 1. Start the Cloud Server
-
-```bash
-python -m server.cloud_server
-```
-
-Output:
-
-```
 ======================================================================
-CLOUD STORAGE PLATFORM - SERVER (DYNAMIC STORAGE)
+CLOUD STORAGE PLATFORM - SERVER (DYNAMIC STORAGE + PAYMENT SYSTEM)
 ======================================================================
-[DATABASE] Connecting to: postgresql://cloud_user:***@localhost:5432/cloud_storage
-[DATABASE] Tables created successfully
-[DATABASE] Database initialized
 Current Global Storage: 0 GB (no nodes registered)
 Storage will grow as nodes are added!
 Server listening on port 50051
-Admin Key: change_this_to_a_secure_random_key
-======================================================================
+Admin Key: your_admin_key
+====================================================================== 2. Start Storage Nodes
+Open separate terminals for each node:
+bash# Node 1 - 2GB capacity
+python node/storage_node.py node1 localhost 9001 2
 
-[READY] Cloud server is ready to accept connections
-```
+# Node 2 - 2GB capacity
 
-#### 2. Start Storage Nodes
+python node/storage_node.py node2 localhost 9002 2
 
-Open new terminals and start nodes:
+# Node 3 - 2GB capacity
 
-```bash
-# Terminal 2: Node 1
-python -m node.storage_node node1 localhost 9001 2
+python node/storage_node.py node3 localhost 9003 2
+Each node will:
 
-# Terminal 3: Node 2
-python -m node.storage_node node2 localhost 9002 3
+Register with the gateway
+Send periodic heartbeats
+Store chunks in node_storage_nodeX/ directory
 
-# Terminal 4: Node 3
-python -m node.storage_node node3 localhost 9003 5
-```
+Using the CLI Client
+Interactive Mode
+bashpython client/cli.py
+Commands:
 
-Each node will output:
+enroll <email> <name> - Register new account
+login <email> - Login to existing account
+upload <file_path> - Upload a file
+download <file_id> [output_path] - Download a file
+list or ls - List files
+delete <file_id> - Delete a file
+storage - Show storage information
+help - Show all commands
+exit - Exit the CLI
 
-```
-[NODE] Storage Node: node1
-[NODE] Storage capacity: 2.00 GB
-[NODE] Listening on localhost:9001
-[NODE] Registered with gateway
-[NODE] Status: ONLINE
-```
-
-### Using the CLI
-
-#### Interactive Mode
-
-```bash
-python -m client.cli
-```
-
-This starts an interactive shell:
-
-```
-======================================================================
-  Cloud Storage CLI - Interactive Mode
-======================================================================
-Type 'help' for available commands or 'exit' to quit
-
-[not logged in] />
-```
-
-#### Command Mode
-
-```bash
-# Send OTP
-python -m client.cli send-otp user@example.com
-
-# Verify OTP
-python -m client.cli verify-otp user@example.com 123456
+Example Session
+bash# Start CLI
+python client/cli.py
 
 # Enroll new user
-python -m client.cli enroll user@example.com "John Doe"
 
-# Login
-python -m client.cli login user@example.com
+> enroll user@example.com "John Doe"
+> 📧 Sending OTP to user@example.com...
+> ✓ OTP sent to your email!
+> 📬 Enter the 6-digit OTP code: 123456
+> 🔐 Verifying OTP...
+> ✓ OTP verified!
+> 📝 Creating your account...
+> ✓ Successfully enrolled John Doe. Allocated 1 GB storage.
 
 # Upload file
-python -m client.cli upload /path/to/file.pdf
+
+> upload test.pdf
+> ℹ Uploading: test.pdf (2.5 MB)
+> ✓ File uploaded successfully
+> ℹ File ID: f7a3b2c1-4d5e-6f7g-8h9i-0j1k2l3m4n5o
 
 # List files
-python -m client.cli list
 
-# Download file
-python -m client.cli download <file_id> /path/to/output
-
-# Delete file
-python -m client.cli delete <file_id>
-python -m client.cli delete <file_id> --permanent
-
-# Check storage
-python -m client.cli storage
-```
-
-### Complete User Workflow
-
-#### 1. Registration & Login
-
-```bash
-# Interactive mode
-python -m client.cli
-
-# In the CLI:
-> send-otp john@example.com
-✓ OTP sent successfully. [TEST MODE: OTP is 123456]
-
-> verify-otp john@example.com 123456
-✓ OTP verified successfully.
-
-> enroll john@example.com John Doe
-✓ Successfully enrolled John Doe. Allocated 1 GB storage.
-ℹ Logged in as: john@example.com
-ℹ User ID: abc-123-def-456
-```
-
-#### 2. File Operations
-
-```bash
-# Upload a file
-> upload /home/user/document.pdf
-ℹ Uploading: document.pdf (2.34 MB)
-✓ File uploaded successfully
-ℹ File ID: file_xyz123
-
-# List files
 > list
-======================================================================
-  Files in: /
-======================================================================
+> 📄 FILES:
 
-📄 FILES:
-Filename                       Size         Type                 Created
-----------------------------------------------------------------------
-document.pdf                   2.34 MB      application/pdf      2024-01-15 10:30:45
-  ID: file_xyz123
+## Filename Size Type
 
-# Get file info
-> info file_xyz123
-======================================================================
-  File Information
-======================================================================
-
-Filename:      document.pdf
-File ID:       file_xyz123
-Size:          2.34 MB
-MIME Type:     application/pdf
-Chunks:        4
-Created:       2024-01-15 10:30:45
-Modified:      2024-01-15 10:30:45
-Shared:        No
+test.pdf 2.5 MB application/pdf
+ID: f7a3b2c1-4d5e-6f7g-8h9i-0j1k2l3m4n5o
 
 # Download file
-> download file_xyz123 /home/user/downloads/
-✓ File downloaded to /home/user/downloads/document.pdf
+
+> download f7a3b2c1-4d5e-6f7g-8h9i-0j1k2l3m4n5o
+> ✓ File downloaded to test.pdf
+> Payment Client
+> bash# List available storage tiers
+> python client/payment_client.py tiers
+
+# Interactive purchase
+
+python client/payment_client.py buy --email user@example.com
+
+# View payment history
+
+python client/payment_client.py history --email user@example.com
+
+# Check payment status
+
+python client/payment_client.py status --payment-id <id> --email user@example.com
+Admin Monitor
+bash# Interactive admin dashboard
+python admin/admin_monitor.py
+
+# Quick status check
+
+python admin/admin_monitor.py --status
+
+# List all users
+
+python admin/admin_monitor.py --users
+
+# Real-time event monitoring
+
+python admin/admin_monitor.py --monitor
+Admin menu options:
+
+View System Status
+List All Users
+List Storage Nodes
+Get User Details
+Start Real-Time Event Monitoring
+Stop Event Monitoring
+Refresh Display
+Exit
+
+📚 API Documentation
+Authentication Service
+SendOTP
+Sends a one-time password to the user's email.
+protobufrpc SendOTP (SendOTPRequest) returns (SendOTPResponse);
+
+message SendOTPRequest {
+string email = 1;
+}
+
+message SendOTPResponse {
+bool success = 1;
+string message = 2;
+}
+Example:
+pythonresponse = auth_stub.SendOTP(
+cloud_storage_pb2.SendOTPRequest(email="user@example.com")
+)
+VerifyOTP
+Verifies the OTP code.
+protobufrpc VerifyOTP (VerifyOTPRequest) returns (VerifyOTPResponse);
+
+message VerifyOTPRequest {
+string email = 1;
+string otp = 2;
+}
+
+message VerifyOTPResponse {
+bool success = 1;
+string message = 2;
+}
+Enroll
+Creates a new user account.
+protobufrpc Enroll (EnrollRequest) returns (EnrollResponse);
+
+message EnrollRequest {
+string email = 1;
+string full_name = 2;
+}
+
+message EnrollResponse {
+bool success = 1;
+string message = 2;
+string session_token = 3;
+string user_id = 4;
+}
+Login
+Authenticates existing user.
+protobufrpc Login (LoginRequest) returns (LoginResponse);
+
+message LoginRequest {
+string email = 1;
+}
+
+message LoginResponse {
+bool success = 1;
+string message = 2;
+string session_token = 3;
+string user_id = 4;
+}
+Logout
+Invalidates user session.
+protobufrpc Logout (LogoutRequest) returns (LogoutResponse);
+
+message LogoutRequest {
+string session_token = 1;
+}
+
+message LogoutResponse {
+bool success = 1;
+string message = 2;
+}
+
+File Service
+UploadFile
+Uploads a file using streaming.
+protobufrpc UploadFile (stream UploadFileRequest) returns (UploadFileResponse);
+
+message UploadFileRequest {
+oneof data {
+FileMetadata metadata = 1;
+bytes chunk_data = 2;
+}
+}
+
+message FileMetadata {
+string session_token = 1;
+string filename = 2;
+int64 file_size = 3;
+string mime_type = 4;
+string parent_folder_id = 5;
+}
+
+message UploadFileResponse {
+bool success = 1;
+string message = 2;
+string file_id = 3;
+int32 chunks_stored = 4;
+}
+Example:
+pythondef upload_iterator(): # First message: metadata
+yield cloud_storage_pb2.UploadFileRequest(
+metadata=cloud_storage_pb2.FileMetadata(
+session_token=session_token,
+filename="document.pdf",
+file_size=1024000,
+mime_type="application/pdf"
+)
+)
+
+    # Subsequent messages: chunks
+    with open("document.pdf", "rb") as f:
+        while True:
+            chunk = f.read(64 * 1024)  # 64KB chunks
+            if not chunk:
+                break
+            yield cloud_storage_pb2.UploadFileRequest(chunk_data=chunk)
+
+response = file_stub.UploadFile(upload_iterator())
+DownloadFile
+Downloads a file using streaming.
+protobufrpc DownloadFile (DownloadFileRequest) returns (stream DownloadFileResponse);
+
+message DownloadFileRequest {
+string session_token = 1;
+string file_id = 2;
+}
+
+message DownloadFileResponse {
+oneof data {
+FileInfo file_info = 1;
+bytes chunk_data = 2;
+}
+}
+ListFiles
+Lists user's files and folders.
+protobufrpc ListFiles (ListFilesRequest) returns (ListFilesResponse);
+
+message ListFilesRequest {
+string session_token = 1;
+string folder_id = 2;
+bool include_deleted = 3;
+}
+
+message ListFilesResponse {
+bool success = 1;
+repeated FileEntry files = 2;
+repeated FolderEntry folders = 3;
+}
+DeleteFile
+Deletes a file (soft or permanent).
+protobufrpc DeleteFile (DeleteFileRequest) returns (DeleteFileResponse);
+
+message DeleteFileRequest {
+string session_token = 1;
+string file_id = 2;
+bool permanent = 3; // false = soft delete, true = permanent
+}
+
+message DeleteFileResponse {
+bool success = 1;
+string message = 2;
+}
+ShareFile
+Shares a file with another user.
+protobufrpc ShareFile (ShareFileRequest) returns (ShareFileResponse);
+
+message ShareFileRequest {
+string session_token = 1;
+string file_id = 2;
+string share_with_email = 3;
+string permission = 4; // "read" or "write"
+}
+
+message ShareFileResponse {
+bool success = 1;
+string message = 2;
+string share_token = 3;
+}
+
+Payment Service
+GetStorageTiers
+Retrieves available storage packages.
+protobufrpc GetStorageTiers (GetStorageTiersRequest) returns (GetStorageTiersResponse);
+
+message GetStorageTiersResponse {
+bool success = 1;
+repeated StorageTier tiers = 2;
+}
+
+message StorageTier {
+string tier_id = 1;
+string name = 2;
+string display_name = 3;
+int64 storage_bytes = 4;
+int32 price_xaf = 5;
+string description = 6;
+}
+InitiatePayment
+Starts a mobile money payment.
+protobufrpc InitiatePayment (InitiatePaymentRequest) returns (InitiatePaymentResponse);
+
+message InitiatePaymentRequest {
+string session_token = 1;
+string tier_id = 2;
+string provider = 3; // "mtn_momo" or "orange_money"
+string phone_number = 4; // Format: 237XXXXXXXXX
+}
+
+message InitiatePaymentResponse {
+bool success = 1;
+string message = 2;
+string payment_id = 3;
+string transaction_ref = 4;
+int32 amount_xaf = 5;
+}
+CheckPaymentStatus
+Checks payment transaction status.
+protobufrpc CheckPaymentStatus (CheckPaymentStatusRequest) returns (CheckPaymentStatusResponse);
+
+message CheckPaymentStatusRequest {
+string session_token = 1;
+string payment_id = 2;
+}
+
+message CheckPaymentStatusResponse {
+bool success = 1;
+string payment_id = 2;
+string status = 3; // "pending", "processing", "completed", "failed"
+string message = 4;
+int64 storage_added = 5;
+}
+GetPaymentHistory
+Retrieves user's payment history.
+protobufrpc GetPaymentHistory (GetPaymentHistoryRequest) returns (GetPaymentHistoryResponse);
+
+message GetPaymentHistoryRequest {
+string session_token = 1;
+int32 limit = 2;
+}
+
+message GetPaymentHistoryResponse {
+bool success = 1;
+repeated PaymentRecord payments = 2;
+}
+
+Storage Service
+GetStorageInfo
+Gets user's storage allocation and usage.
+protobufrpc GetStorageInfo (StorageInfoRequest) returns (StorageInfoResponse);
+
+message StorageInfoRequest {
+string session_token = 1;
+}
+
+message StorageInfoResponse {
+bool success = 1;
+int64 allocated_bytes = 2;
+int64 used_bytes = 3;
+int64 available_bytes = 4;
+double usage_percentage = 5;
+}
+
+Admin Service
+GetSystemStatus
+Retrieves comprehensive system statistics.
+protobufrpc GetSystemStatus (SystemStatusRequest) returns (SystemStatusResponse);
+
+message SystemStatusRequest {
+string admin_key = 1;
+}
+
+message SystemStatusResponse {
+bool success = 1;
+int64 global_capacity_bytes = 2;
+int64 global_allocated_bytes = 3;
+int64 global_used_bytes = 4;
+int32 total_users = 5;
+int32 total_nodes = 6;
+int32 online_nodes = 7;
+int64 total_files = 8;
+int64 total_chunks = 9;
+double system_health = 10;
+}
+ListAllUsers
+Lists all registered users.
+protobufrpc ListAllUsers (ListUsersRequest) returns (ListUsersResponse);
+
+message ListUsersRequest {
+string admin_key = 1;
+}
+
+message ListUsersResponse {
+bool success = 1;
+repeated UserInfo users = 2;
+}
+StreamSystemEvents
+Streams real-time system events.
+protobufrpc StreamSystemEvents (StreamEventsRequest) returns (stream SystemEvent);
+
+message StreamEventsRequest {
+string admin_key = 1;
+}
+
+message SystemEvent {
+string event_type = 1;
+string timestamp = 2;
+string message = 3;
+string user_id = 4;
+string details = 5;
+}
+
+🔄 Sequence Diagrams
+User Enrollment Flow
+
+![enrollment sequence diagram](image.png)
+File Upload Flow
+
+![file upload sequence diagram](image-1.png)
+File Download Flow
+
+![file download](image-2.png)
+
+Payment Flow
+![payment flow sequence](image-3.png)
+
+Storage Node Registration Flow
+![node registration](image-4.png)
+
+Admin Monitoring Flow
+![Admin monitor flow sequence](image-5.png)
+
 ```
 
-#### 3. Folder Management
+---
 
-```bash
-# Create folder
-> mkdir Work Documents
-✓ Folder created
-ℹ Folder ID: folder_abc123
-
-# Upload to folder would require navigating (future enhancement)
+## 📁 Project Structure
 ```
 
-#### 4. File Sharing
+CLI_Cloud_Platform_2.0/
+├── admin/ # Administrative tools
+│ ├── admin_monitor.py # Real-time monitoring dashboard
+│ └── **init**.py
+│
+├── auth/ # Authentication module
+│ ├── gmail_otp.py # OTP generation and email
+│ └── **init**.py
+│
+├── client/ # Client applications
+│ ├── cli.py # Command-line interface
+│ ├── cloud_client.py # gRPC client library
+│ ├── payment_client.py # Payment operations client
+│ └── **init**.py
+│
+├── db/ # Database layer
+│ ├── database.py # Database connection & sessions
+│ ├── models.py # SQLAlchemy models
+│ ├── init_payment_tables.py # Payment system setup
+│ └── **init**.py
+│
+├── file/ # File management
+│ ├── file_manager.py # File operations & metadata
+│ └── **init**.py
+│
+├── generated/ # Auto-generated from proto
+│ ├── cloud_storage_pb2.py
+│ ├── cloud_storage_pb2_grpc.py
+│ └── **init**.py
+│
+├── node/ # Storage nodes
+│ ├── storage_node.py # Node server implementation
+│ └── **init**.py
+│
+├── payment/ # Payment system
+│ ├── campay_client.py # Campay API integration
+│ ├── payment_manager.py # Payment processing logic
+│ └── **init**.py
+│
+├── proto/ # Protocol Buffers definitions
+│ └── cloud_storage.proto
+│
+├── server/ # Cloud gateway server
+│ ├── cloud_server.py # Main gRPC server
+│ └── **init**.py
+│
+├── storage/ # Storage management
+│ ├── chunk_distributor.py # Chunk placement algorithm
+│ ├── node_manager.py # Node registry & health
+│ └── **init**.py
+│
+├── user/ # User management
+│ ├── user_manager.py # User operations & sessions
+│ └── **init**.py
+│
+├── utils/ # Utility functions
+│ ├── helpers.py # Common helpers
+│ └── **init**.py
+│
+├── .env # Environment configuration
+├── .gitignore
+├── generate_proto.py # Proto compilation script
+├── requirements.txt # Python dependencies
+└── README.md # This file
 
-```bash
-# Share file with another user
-> share file_xyz123 jane@example.com read
-✓ File shared successfully
-ℹ Share token: abc123def456
+💳 Payment Integration
+Campay Setup
 
-# View files shared with you
-> shared
-======================================================================
-  Shared Files
-======================================================================
+Create Campay Account
 
-Filename                       Shared By                      Permission   Date
-----------------------------------------------------------------------
-report.pdf                     john@example.com               read         2024-01-15 09:15:22
-  ID: file_shared123
+Visit Campay.net
+Register for merchant account
+Complete verification process
+
+Get API Credentials
+
+Login to Campay dashboard
+Navigate to Settings → API Keys
+Copy App Username and App Password
+
+Configure Environment
+
+env CAMPAY_APP_USERNAME=your_username
+CAMPAY_APP_PASSWORD=your_password
+CAMPAY_BASE_URL=https://demo.campay.net/api # Demo mode
+
+# CAMPAY_BASE_URL=https://www.campay.net/api # Production mode
+
 ```
 
-#### 5. Storage Management
+### Payment Flow
 
-```bash
-# Check storage quota
-> storage
-======================================================================
-  Storage Information
-======================================================================
+1. **User Initiates Payment**
+   - Selects storage tier
+   - Chooses payment provider (MTN/Orange)
+   - Enters phone number
 
-Allocated:     1.00 GB
-Used:          156.78 MB
-Available:     891.22 MB
-Usage:         15.30%
+2. **System Processes**
+   - Creates payment record in database
+   - Sends collection request to Campay
+   - Campay sends USSD prompt to user's phone
 
-[███████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 15.3%
+3. **User Confirms**
+   - Receives USSD notification on phone
+   - Enters mobile money PIN
+   - Confirms transaction
+
+4. **Storage Allocation**
+   - System receives payment confirmation
+   - Automatically adds storage to user account
+   - Creates purchase record
+
+### Testing Payments
+
+**Demo Mode** (automatically detected):
+- Maximum amount: 10 XAF per transaction
+- All transactions succeed immediately
+- No real money transferred
+
+**Test Phone Numbers**:
 ```
 
-### Admin Monitoring
+MTN: 237670000001 - 237670000010
+Orange: 237690000001 - 237690000010
+Test Transaction Flow:
+bash# 1. Start payment client
+python client/payment_client.py buy --email test@example.com
 
-```bash
-# Start admin monitor
-python -m admin.admin_monitor
+# 2. Select tier (e.g., Starter Pack)
 
-# Or quick status check
-python -m admin.admin_monitor --status
+# 3. Select provider (MTN or Orange)
 
-# Or real-time monitoring
-python -m admin.admin_monitor --monitor
+# 4. Enter test phone number
+
+# 5. In demo mode, payment succeeds automatically
+
+# 6. Check payment status
+
+python client/payment*client.py status --payment-id <id> --email test@example.com
+🛠 Development
+Adding New Storage Tiers
+Edit db/init_payment_tables.py:
+python{
+'name': 'enterprise',
+'display_name': 'Enterprise Pack',
+'storage_bytes': 10 * 1024 \_ 1024 \* 1024, # 10 GB
+'price_xaf': 10000, # 10,000 XAF
+'description': 'For business users - add 10 GB'
+}
+Run:
+bashpython db/init_payment_tables.py
+Modifying Proto Definitions
+
+Edit proto/cloud_storage.proto
+Regenerate Python code:
+
+bash python generate_proto.py
+
+Update server and client implementations
+
+Adding New Node
+bashpython node/storage_node.py node4 localhost 9004 5
+Storage capacity automatically added to global pool.
+
+🐛 Troubleshooting
+Database Connection Issues
+bash# Check PostgreSQL is running
+sudo systemctl status postgresql
+
+# Test connection
+
+psql -U postgres -d cloud_storage
+
+# Reset database
+
+python -c "from db.database import db; db.drop_tables(); db.create_tables()"
+OTP Email Not Sending
+
+Verify Gmail app password is correct
+Check 2FA is enabled on Google account
+For macOS: Ensure port 465 is not blocked
+Test mode fallback: OTP will print to console
+
+Payment Failures
+
+Verify Campay credentials in .env
+Check demo mode URL is correct
+Validate phone number format: 237XXXXXXXXX
+Review payment logs in admin monitor
+
+Node Registration Failures
+
+Ensure gateway server is running first
+Check node ports are not in use
+Verify network connectivity
+Review node logs for errors
+
+Storage Quota Issues
+bash# Check user storage via admin monitor
+python admin/admin_monitor.py
+
+# Manually adjust user quota (admin)
+
+python -c "
+from db.database import get_db_session
+from db.models import User
+with get_db_session() as session:
+user = session.query(User).filter_by(email='user@example.com').first()
+user.storage_allocated = 5 \* 1024\*\*3 # 5 GB
+"
+
+📊 Performance Considerations
+File Upload Optimization
+
+Chunk Size: Default 64KB for network transfer
+Parallel Uploads: Chunks uploaded concurrently
+Compression: Consider implementing compression for text files
+Deduplication: Future enhancement for identical chunks
+
+Scalability
+
+Horizontal Scaling: Add more storage nodes dynamically
+Load Balancing: Chunk distributor balances across nodes
+Database: Connection pooling (max 20 connections)
+Node Selection: Health-based algorithm prioritizes best nodes
+
+Monitoring Metrics
+
+Total storage capacity vs. used
+Node health scores
+Upload/download speeds
+Payment success rates
+Active user sessions
+
+🔒 Security
+Authentication
+
+OTP-based email verification
+Session tokens expire after 24 hours
+Secure password hashing (future enhancement)
+
+Data Protection
+
+User data isolation at database level
+File access controlled by ownership and shares
+Admin operations require admin key
+
+Payment Security
+
+Sensitive credentials in environment variables
+PCI compliance through Campay gateway
+Transaction verification before storage allocation
+
+Recommendations
+
+Use HTTPS/TLS in production
+Implement rate limiting
+Regular security audits
+Encrypt sensitive data at rest
+
+🚀 Deployment
+Production Checklist
+
+Update database credentials
+Configure production Campay URL
+Set strong admin key
+Enable SSL/TLS for gRPC
+Set up PostgreSQL replication
+Configure backup strategy
+Set up monitoring and alerting
+Review and adjust storage tiers
+Load test with expected traffic
+Document disaster recovery procedures
+
+Docker Deployment (Future Enhancement)
+yaml# docker-compose.yml (example)
+version: '3.8'
+
+services:
+postgres:
+image: postgres:13
+environment:
+POSTGRES_DB: cloud_storage
+POSTGRES_PASSWORD: ${DB_PASSWORD}
+volumes: - postgres_data:/var/lib/postgresql/data
+
+gateway:
+build: .
+command: python server/cloud_server.py
+ports: - "50051:50051"
+depends_on: - postgres
+environment: - DB_HOST=postgres
+
+node1:
+build: .
+command: python node/storage_node.py node1 0.0.0.0 9001 10
+
+volumes:
+postgres_data:
+
+🤝 Contributing
+We welcome contributions! Please follow these guidelines:
+How to Contribute
+
+Fork the repository
+Create a feature branch
+
+bash git checkout -b feature/amazing-feature
+
+Make your changes
+Test thoroughly
+Commit with clear messages
+
+bash git commit -m "Add amazing feature"
+
+Push to your fork
+
+bash git push origin feature/amazing-feature
+
+```
+7. **Open a Pull Request**
+
+### Code Style
+
+- Follow PEP 8 for Python code
+- Use descriptive variable and function names
+- Add docstrings to functions and classes
+- Comment complex logic
+
+### Testing
+
+- Test all new features locally
+- Ensure existing functionality works
+- Test error handling and edge cases
+
+---
+
+## 📝 License
+
+This project is licensed under the MIT License - see below for details:
 ```
 
-Admin dashboard shows:
+MIT License
 
-```
-================================================================================
-CLOUD STORAGE PLATFORM - SYSTEM STATUS
-================================================================================
+Copyright (c) 2024 CloudGrpc Storage Platform
 
-📊 STORAGE OVERVIEW:
-  Total Capacity:     10.00 GB
-  Allocated:          3.00 GB
-  Actually Used:      156.78 MB
-  Available:          7.00 GB
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-  Allocation: [███████████░░░░░░░░░░░░░░░░░░░░░░░░░░░] 30.0%
-  Usage:      [█████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 5.1%
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-👥 USER STATISTICS:
-  Total Users:        3
-
-💾 STORAGE NODES:
-  Total Nodes:        3
-  Online Nodes:       3
-  Offline Nodes:      0
-  Node Health:        🟢 HEALTHY (100%)
-
-📁 FILE STATISTICS:
-  Total Files:        12
-  Total Chunks:       48
-  Avg Chunks/File:    4.0
-
-🏥 SYSTEM HEALTH:
-  Overall Health:     100.0%
-================================================================================
-```
-
-## CLI Commands Reference
-
-### Authentication
-
-| Command                    | Description         | Example                              |
-| -------------------------- | ------------------- | ------------------------------------ |
-| `send-otp <email>`         | Send OTP to email   | `send-otp user@example.com`          |
-| `verify-otp <email> <otp>` | Verify OTP          | `verify-otp user@example.com 123456` |
-| `enroll <email> <name>`    | Register new user   | `enroll user@example.com "John Doe"` |
-| `login <email>`            | Login existing user | `login user@example.com`             |
-| `logout`                   | Logout current user | `logout`                             |
-
-### File Operations
-
-| Command                   | Description        | Example                          |
-| ------------------------- | ------------------ | -------------------------------- |
-| `upload <path>`           | Upload file        | `upload /path/file.pdf`          |
-| `download <id> [path]`    | Download file      | `download file_123 ~/downloads/` |
-| `list` (or `ls`)          | List files         | `list`                           |
-| `delete <id>`             | Move to trash      | `delete file_123`                |
-| `delete <id> --permanent` | Permanently delete | `delete file_123 --permanent`    |
-| `info <id>`               | Show file info     | `info file_123`                  |
-| `mkdir <name>`            | Create folder      | `mkdir Documents`                |
-
-### Sharing
-
-| Command                     | Description       | Example                                |
-| --------------------------- | ----------------- | -------------------------------------- |
-| `share <id> <email> [perm]` | Share file        | `share file_123 user@example.com read` |
-| `shared`                    | List shared files | `shared`                               |
-
-### Storage
-
-| Command   | Description       | Example   |
-| --------- | ----------------- | --------- |
-| `storage` | Show storage info | `storage` |
-
-### Utility
-
-| Command            | Description  |
-| ------------------ | ------------ |
-| `help`             | Show help    |
-| `clear`            | Clear screen |
-| `exit` (or `quit`) | Exit CLI     |
-
-## Dynamic Storage Scaling
-
-The system automatically adjusts total storage as nodes are added/removed:
-
-```bash
-# Start with 2GB
-python -m node.storage_node node1 localhost 9001 2
-# → Global storage: 2GB
-
-# Add 3GB
-python -m node.storage_node node2 localhost 9002 3
-# → Global storage: 5GB
-
-# Add 5GB
-python -m node.storage_node node3 localhost 9003 5
-# → Global storage: 10GB
-```
-
-Check current capacity:
-
-```bash
-python -m admin.admin_monitor --status
-```
-
-## Troubleshooting
-
-### Database Connection Error
-
-**Error:** `could not connect to server`
-
-**Solution:**
-
-1. Check PostgreSQL is running: `sudo systemctl status postgresql`
-2. Verify database exists: `psql -U cloud_user -d cloud_storage`
-3. Check `.env` credentials match PostgreSQL setup
-
-### OTP Not Sending
-
-**Error:** `Email service unavailable`
-
-**Solution:**
-
-1. Verify Gmail credentials in `.env`
-2. Check Gmail App Password is correct (16 characters, no spaces)
-3. System falls back to TEST MODE showing OTP in console
-
-### Storage Quota Exceeded
-
-**Error:** `Storage quota exceeded`
-
-**Solution:**
-
-- User has used their 1GB allocation
-- Delete old files or increase quota in database:
-
-```sql
-UPDATE users
-SET storage_allocated = 2147483648
-WHERE email = 'user@example.com';
--- 2GB = 2,147,483,648 bytes
-```
-
-### Node Not Registering
-
-**Error:** Node starts but server doesn't show it
-
-**Solution:**
-
-1. Check server is running on port 50051
-2. Verify node can reach server
-3. Check server logs for registration errors
-
-## Production Deployment
-
-### Security Checklist
-
-- [ ] Change `ADMIN_KEY` to strong random value
-- [ ] Use strong PostgreSQL passwords
-- [ ] Enable SSL for gRPC (production)
-- [ ] Set up firewall rules
-- [ ] Use environment-specific `.env` files
-- [ ] Enable database backups
-- [ ] Implement rate limiting
-- [ ] Add logging and monitoring
-
-### Multi-Machine Deployment
-
-```bash
-# Server (192.168.1.10)
-python -m server.cloud_server
-
-# Node 1 (192.168.1.20)
-python -m node.storage_node node1 192.168.1.20 9001 100
-
-# Node 2 (192.168.1.21)
-python -m node.storage_node node2 192.168.1.21 9001 100
-
-# Client (anywhere)
-# Update .env:
-GRPC_SERVER_HOST=192.168.1.10
-GRPC_SERVER_PORT=50051
-```
-
-## Support
-
-For issues or questions:
-
-1. Check server logs
-2. Review admin monitor output
-3. Verify all services are running
-4. Check database connectivity
-
-Enjoy your cloud storage platform! 🚀
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

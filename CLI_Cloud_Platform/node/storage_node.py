@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Storage Node - Stores file chunks on disk using gRPC
-FIXED: Proper import paths
+FIXED: Uses absolute paths for consistent storage location
 """
 import grpc
 from concurrent import futures
@@ -10,6 +10,7 @@ import sys
 import time
 import threading
 from datetime import datetime
+from pathlib import Path
 
 # CRITICAL: Add parent directory to Python path BEFORE imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -17,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Now we can import from generated and other packages
 from generated import cloud_storage_pb2
 from generated import cloud_storage_pb2_grpc
+
 
 class StorageNodeServicer(cloud_storage_pb2_grpc.NodeServiceServicer):
     def __init__(self, node_id, storage_dir):
@@ -56,6 +58,7 @@ class StorageNodeServicer(cloud_storage_pb2_grpc.NodeServiceServicer):
             chunk_path = os.path.join(self.storage_dir, f"{chunk_id}.chunk")
             
             if not os.path.exists(chunk_path):
+                print(f"[ERROR] Chunk not found: {chunk_path}")
                 return cloud_storage_pb2.RetrieveChunkResponse(
                     success=False,
                     message="Chunk not found"
@@ -84,15 +87,31 @@ class StorageNodeServicer(cloud_storage_pb2_grpc.NodeServiceServicer):
             if os.path.exists(chunk_path):
                 os.remove(chunk_path)
                 print(f"[DELETE] Chunk {chunk_id}")
-            
-            return cloud_storage_pb2.DeleteChunkResponse(
-                success=True,
-                message="Chunk deleted"
-            )
+                return cloud_storage_pb2.DeleteChunkResponse(
+                    success=True,
+                    message="Chunk deleted"
+                )
+            else:
+                return cloud_storage_pb2.DeleteChunkResponse(
+                    success=False,
+                    message="Chunk not found"
+                )
         
         except Exception as e:
             print(f"[ERROR] Delete chunk failed: {e}")
             context.abort(grpc.StatusCode.INTERNAL, str(e))
+
+
+def get_project_root():
+    """
+    Get the project root directory (where this script's parent is)
+    This ensures storage is always created in the same place
+    """
+    # This file is in: /project_root/node/storage_node.py
+    # We want: /project_root/
+    script_dir = Path(__file__).resolve().parent  # /project_root/node/
+    project_root = script_dir.parent  # /project_root/
+    return project_root
 
 
 def register_with_gateway(node_id, host, port, storage_capacity, gateway_host='localhost:50051'):
@@ -154,14 +173,19 @@ def send_heartbeat(node_id, storage_dir, gateway_host='localhost:50051'):
 def serve(node_id, host, port, storage_capacity_gb):
     """Start the storage node"""
     storage_capacity = int(storage_capacity_gb * 1024**3)
-    storage_dir = f'node_storage_{node_id}'
+    
+    # FIXED: Use absolute path in project root
+    project_root = get_project_root()
+    storage_dir = project_root / f'node_storage_{node_id}'
+    storage_dir = str(storage_dir)  # Convert Path to string for compatibility
     
     print("=" * 60)
     print(f"STORAGE NODE - {node_id}")
     print("=" * 60)
     print(f"Address: {host}:{port}")
     print(f"Storage: {storage_capacity_gb} GB")
-    print(f"Directory: {storage_dir}")
+    print(f"Project Root: {project_root}")
+    print(f"Storage Directory: {storage_dir}")
     print("=" * 60)
     
     # Register with gateway

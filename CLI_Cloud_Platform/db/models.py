@@ -1,11 +1,15 @@
 """
-Database Models
+Database Models - Complete merged version
+Includes core file storage system + extended payment and storage purchase system
 """
-from sqlalchemy import Column, String, Integer, BigInteger, Boolean, DateTime, JSON, ForeignKey, Text
+
+from sqlalchemy import Column, String, Integer, BigInteger, Boolean, DateTime, JSON, ForeignKey, Text, Enum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
+import enum
+
 
 Base = declarative_base()
 
@@ -15,6 +19,28 @@ def generate_uuid():
     return str(uuid.uuid4())
 
 
+# ----------------------------------------------------------------------
+# Enums for Payment System
+# ----------------------------------------------------------------------
+class PaymentStatus(enum.Enum):
+    """Payment status enumeration"""
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    REFUNDED = "refunded"
+    CANCELLED = "cancelled"
+
+
+class PaymentProvider(enum.Enum):
+    """Payment provider enumeration"""
+    MTN_MOMO = "mtn_momo"
+    ORANGE_MONEY = "orange_money"
+
+
+# ----------------------------------------------------------------------
+# Core Models (File Storage System)
+# ----------------------------------------------------------------------
 class User(Base):
     __tablename__ = 'users'
     
@@ -26,10 +52,14 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login = Column(DateTime, nullable=True)
     
-    # Relationships
+    # Relationships - Core
     files = relationship('File', back_populates='user', cascade='all, delete-orphan')
     folders = relationship('Folder', back_populates='user', cascade='all, delete-orphan')
     sessions = relationship('Session', back_populates='user', cascade='all, delete-orphan')
+    
+    # Relationships - Payment System (added)
+    payments = relationship('Payment', back_populates='user', cascade='all, delete-orphan')
+    storage_purchases = relationship('StoragePurchase', back_populates='user')
 
 
 class Session(Base):
@@ -141,3 +171,97 @@ class SystemEvent(Base):
     user_id = Column(String(36), nullable=True)
     metadatas = Column(JSON, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+# ----------------------------------------------------------------------
+# Extended Payment System Models
+# ----------------------------------------------------------------------
+class StorageTier(Base):
+    """Storage purchase tiers"""
+    __tablename__ = 'storage_tiers'
+
+    tier_id = Column(String(36), primary_key=True, default=generate_uuid)
+    name = Column(String(50), nullable=False, unique=True)  # e.g., "Starter", "Pro"
+    display_name = Column(String(100), nullable=False)
+    storage_bytes = Column(BigInteger, nullable=False)  # Additional storage in bytes
+    price_xaf = Column(Integer, nullable=False)  # Price in XAF (Central African Franc)
+    is_active = Column(Boolean, default=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    payments = relationship('Payment', back_populates='tier')
+
+
+class Payment(Base):
+    """Payment transactions"""
+    __tablename__ = 'payments'
+
+    payment_id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey('users.user_id'), nullable=False)
+    tier_id = Column(String(36), ForeignKey('storage_tiers.tier_id'), nullable=False)
+
+    # Payment details
+    amount_xaf = Column(Integer, nullable=False)
+    storage_bytes = Column(BigInteger, nullable=False)
+    provider = Column(String(20), nullable=False)  # mtn_momo, orange_money
+    phone_number = Column(String(20), nullable=False)
+
+    # Transaction tracking
+    transaction_ref = Column(String(100), unique=True, nullable=False)  # Our internal ref
+    external_ref = Column(String(100), nullable=True)  # Campay reference
+    campay_transaction_id = Column(String(100), nullable=True)
+
+    # Status tracking
+    status = Column(String(20), default='pending', nullable=False)
+    error_message = Column(Text, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    processed_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+
+    # Metadata - FIXED: renamed to avoid SQLAlchemy conflict
+    payment_metadata = Column(JSON, default=dict)  # Additional data from Campay
+
+    # Relationships
+    user = relationship('User', back_populates='payments')
+    tier = relationship('StorageTier', back_populates='payments')
+    storage_purchase = relationship('StoragePurchase', back_populates='payment', uselist=False)
+    webhooks = relationship('PaymentWebhook', back_populates='payment')
+
+
+class StoragePurchase(Base):
+    """Storage purchase history - tracks actual storage additions"""
+    __tablename__ = 'storage_purchases'
+
+    purchase_id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey('users.user_id'), nullable=False)
+    payment_id = Column(String(36), ForeignKey('payments.payment_id'), nullable=False)
+    storage_bytes = Column(BigInteger, nullable=False)
+    previous_allocation = Column(BigInteger, nullable=False)
+    new_allocation = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship('User', back_populates='storage_purchases')
+    payment = relationship('Payment')
+
+
+class PaymentWebhook(Base):
+    """Log all webhook callbacks from Campay"""
+    __tablename__ = 'payment_webhooks'
+
+    webhook_id = Column(String(36), primary_key=True, default=generate_uuid)
+    payment_id = Column(String(36), ForeignKey('payments.payment_id'), nullable=True)
+
+    # Webhook data
+    external_ref = Column(String(100), nullable=True)
+    status = Column(String(20), nullable=False)
+    raw_data = Column(JSON, nullable=False)  # Complete webhook payload
+    processed = Column(Boolean, default=False)
+    processed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    payment = relationship('Payment', back_populates='webhooks')

@@ -144,7 +144,108 @@ class FileManager:
             return False, [], []
     
     def delete_file(self, file_id, user_id, permanent=False):
-        """Delete file (soft delete by default)"""
+        """
+        Delete a file (soft or permanent)
+        Returns: (success: bool, message: str, chunk_info: list)
+        
+        chunk_info contains: [{'chunk_id': str, 'node_id': str, 'node_host': str, 'node_port': int, 'replica_nodes': list}, ...]
+        """
+        try:
+            with get_db_session() as session:
+                # Get file
+                file = session.query(File).filter_by(
+                    file_id=file_id,
+                    user_id=user_id
+                ).first()
+                
+                if not file:
+                    return False, "File not found", []
+                
+                # Check if already deleted
+                if file.deleted_at and not permanent:
+                    return False, "File already deleted", []
+                
+                file_size = file.file_size
+                
+                # Get chunk information with node details BEFORE deletion
+                chunks = session.query(Chunk).filter_by(file_id=file_id).all()
+                chunk_info = []
+                
+                for chunk in chunks:
+                    from db.models import StorageNode
+                    primary_node = session.query(StorageNode).filter_by(
+                        node_id=chunk.primary_node_id
+                    ).first()
+                    
+                    chunk_data = {
+                        'chunk_id': chunk.chunk_id,
+                        'node_id': chunk.primary_node_id,
+                        'node_host': primary_node.host if primary_node else None,
+                        'node_port': primary_node.port if primary_node else None,
+                        'replica_nodes': []
+                    }
+                    
+                    # Get replica node information
+                    if chunk.replica_nodes:
+                        for replica_id in chunk.replica_nodes:
+                            replica_node = session.query(StorageNode).filter_by(
+                                node_id=replica_id
+                            ).first()
+                            if replica_node:
+                                chunk_data['replica_nodes'].append({
+                                    'node_id': replica_id,
+                                    'node_host': replica_node.host,
+                                    'node_port': replica_node.port
+                                })
+                    
+                    chunk_info.append(chunk_data)
+                
+                if permanent:
+                    # PERMANENT DELETE
+                    print(f"[FILE] Permanently deleting: {file.filename} ({file_size} bytes)")
+                    print(f"[FILE] Chunks to delete: {len(chunk_info)}")
+                    
+                    # Delete chunks from database
+                    session.query(Chunk).filter_by(file_id=file_id).delete()
+                    
+                    # Delete file shares
+                    session.query(FileShare).filter_by(file_id=file_id).delete()
+                    
+                    # Delete file from database
+                    session.delete(file)
+                    
+                    # CRITICAL: Free up user's storage quota
+                    user = session.query(User).filter_by(user_id=user_id).first()
+                    if user:
+                        old_usage = user.storage_used
+                        user.storage_used = max(0, user.storage_used - file_size)
+                        print(f"[STORAGE] Freed {file_size} bytes for user {user_id}")
+                        print(f"[STORAGE] User storage: {old_usage} -> {user.storage_used} (allocated: {user.storage_allocated})")
+                    
+                    session.commit()
+                    
+                    return True, f"File permanently deleted: {file.filename}", chunk_info
+                
+                else:
+                    # SOFT DELETE
+                    print(f"[FILE] Soft deleted: {file.filename}")
+                    file.deleted_at = datetime.utcnow()
+                    session.commit()
+                    
+                    # Don't return chunk info for soft delete (chunks stay on nodes)
+                    return True, f"File moved to trash: {file.filename}", []
+        
+        except Exception as e:
+            print(f"[ERROR] Delete file failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return False, str(e), []
+
+    def restore_file(self, file_id, user_id):
+        """
+        Restore a soft-deleted file
+        Returns: (success: bool, message: str)
+        """
         try:
             with get_db_session() as session:
                 file = session.query(File).filter_by(
@@ -155,25 +256,93 @@ class FileManager:
                 if not file:
                     return False, "File not found"
                 
-                if permanent:
-                    # Get chunks to delete from storage
-                    chunks = session.query(Chunk).filter_by(file_id=file_id).all()
-                    chunk_ids = [chunk.chunk_id for chunk in chunks]
-                    
-                    # Delete file and chunks (cascade will handle chunks)
-                    session.delete(file)
-                    
-                    print(f"[FILE] Permanently deleted: {file.filename}")
-                    return True, "File permanently deleted", chunk_ids
-                else:
-                    # Soft delete
-                    file.deleted_at = datetime.utcnow()
-                    print(f"[FILE] Soft deleted: {file.filename}")
-                    return True, "File moved to trash", []
+                if not file.deleted_at:
+                    return False, "File is not deleted"
+                
+                # Restore file
+                file.deleted_at = None
+                session.commit()
+                
+                print(f"[FILE] Restored: {file.filename}")
+                return True, f"File restored: {file.filename}"
         
         except Exception as e:
-            print(f"[ERROR] Failed to delete file: {e}")
-            return False, str(e), []
+            print(f"[ERROR] Restore file failed: {e}")
+            return False, str(e)
+
+    def empty_trash(self, user_id):
+        """
+        Permanently delete all soft-deleted files for a user
+        Returns: (success: bool, message: str, total_freed: int, all_chunk_info: list)
+        """
+        try:
+            with get_db_session() as session:
+                # Get all soft-deleted files
+                deleted_files = session.query(File).filter(
+                    File.user_id == user_id,
+                    File.deleted_at.isnot(None)
+                ).all()
+                
+                if not deleted_files:
+                    return True, "Trash is already empty", 0, []
+                
+                total_size = sum(f.file_size for f in deleted_files)
+                file_count = len(deleted_files)
+                all_chunk_info = []
+                
+                # Collect chunk info and delete all chunks and files
+                for file in deleted_files:
+                    # Get chunks with node info
+                    chunks = session.query(Chunk).filter_by(file_id=file.file_id).all()
+                    
+                    for chunk in chunks:
+                        from db.models import StorageNode
+                        primary_node = session.query(StorageNode).filter_by(
+                            node_id=chunk.primary_node_id
+                        ).first()
+                        
+                        chunk_data = {
+                            'chunk_id': chunk.chunk_id,
+                            'node_id': chunk.primary_node_id,
+                            'node_host': primary_node.host if primary_node else None,
+                            'node_port': primary_node.port if primary_node else None,
+                            'replica_nodes': []
+                        }
+                        
+                        if chunk.replica_nodes:
+                            for replica_id in chunk.replica_nodes:
+                                replica_node = session.query(StorageNode).filter_by(
+                                    node_id=replica_id
+                                ).first()
+                                if replica_node:
+                                    chunk_data['replica_nodes'].append({
+                                        'node_id': replica_id,
+                                        'node_host': replica_node.host,
+                                        'node_port': replica_node.port
+                                    })
+                        
+                        all_chunk_info.append(chunk_data)
+                    
+                    # Delete chunks
+                    session.query(Chunk).filter_by(file_id=file.file_id).delete()
+                    # Delete shares
+                    session.query(FileShare).filter_by(file_id=file.file_id).delete()
+                    # Delete file
+                    session.delete(file)
+                
+                # Free up storage quota
+                user = session.query(User).filter_by(user_id=user_id).first()
+                if user:
+                    user.storage_used = max(0, user.storage_used - total_size)
+                    print(f"[STORAGE] Emptied trash: freed {total_size} bytes for user {user_id}")
+                
+                session.commit()
+                
+                return True, f"Permanently deleted {file_count} files", total_size, all_chunk_info
+        
+        except Exception as e:
+            print(f"[ERROR] Empty trash failed: {e}")
+            return False, str(e), 0, []
     
     def get_file_chunks(self, file_id):
         """Get all chunks for a file"""

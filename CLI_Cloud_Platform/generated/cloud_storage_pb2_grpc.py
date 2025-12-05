@@ -784,6 +784,305 @@ class StorageService(object):
             _registered_method=True)
 
 
+<<<<<<< HEAD
+=======
+class PaymentServiceStub(object):
+    """============================================================================
+    Payment Service
+    ============================================================================
+    """
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.GetStorageTiers = channel.unary_unary(
+                '/cloudstorage.PaymentService/GetStorageTiers',
+                request_serializer=cloud__storage__pb2.GetStorageTiersRequest.SerializeToString,
+                response_deserializer=cloud__storage__pb2.GetStorageTiersResponse.FromString,
+                _registered_method=True)
+        self.InitiatePayment = channel.unary_unary(
+                '/cloudstorage.PaymentService/InitiatePayment',
+                request_serializer=cloud__storage__pb2.InitiatePaymentRequest.SerializeToString,
+                response_deserializer=cloud__storage__pb2.InitiatePaymentResponse.FromString,
+                _registered_method=True)
+        self.CheckPaymentStatus = channel.unary_unary(
+                '/cloudstorage.PaymentService/CheckPaymentStatus',
+                request_serializer=cloud__storage__pb2.CheckPaymentStatusRequest.SerializeToString,
+                response_deserializer=cloud__storage__pb2.CheckPaymentStatusResponse.FromString,
+                _registered_method=True)
+        self.GetPaymentHistory = channel.unary_unary(
+                '/cloudstorage.PaymentService/GetPaymentHistory',
+                request_serializer=cloud__storage__pb2.GetPaymentHistoryRequest.SerializeToString,
+                response_deserializer=cloud__storage__pb2.GetPaymentHistoryResponse.FromString,
+                _registered_method=True)
+        self.CancelPayment = channel.unary_unary(
+                '/cloudstorage.PaymentService/CancelPayment',
+                request_serializer=cloud__storage__pb2.CancelPaymentRequest.SerializeToString,
+                response_deserializer=cloud__storage__pb2.CancelPaymentResponse.FromString,
+                _registered_method=True)
+        self.ProcessWebhook = channel.unary_unary(
+                '/cloudstorage.PaymentService/ProcessWebhook',
+                request_serializer=cloud__storage__pb2.WebhookRequest.SerializeToString,
+                response_deserializer=cloud__storage__pb2.WebhookResponse.FromString,
+                _registered_method=True)
+
+
+class PaymentServiceServicer(object):
+    """============================================================================
+    Payment Service
+    ============================================================================
+    """
+
+    def GetStorageTiers(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def InitiatePayment(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CheckPaymentStatus(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetPaymentHistory(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CancelPayment(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ProcessWebhook(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_PaymentServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'GetStorageTiers': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetStorageTiers,
+                    request_deserializer=cloud__storage__pb2.GetStorageTiersRequest.FromString,
+                    response_serializer=cloud__storage__pb2.GetStorageTiersResponse.SerializeToString,
+            ),
+            'InitiatePayment': grpc.unary_unary_rpc_method_handler(
+                    servicer.InitiatePayment,
+                    request_deserializer=cloud__storage__pb2.InitiatePaymentRequest.FromString,
+                    response_serializer=cloud__storage__pb2.InitiatePaymentResponse.SerializeToString,
+            ),
+            'CheckPaymentStatus': grpc.unary_unary_rpc_method_handler(
+                    servicer.CheckPaymentStatus,
+                    request_deserializer=cloud__storage__pb2.CheckPaymentStatusRequest.FromString,
+                    response_serializer=cloud__storage__pb2.CheckPaymentStatusResponse.SerializeToString,
+            ),
+            'GetPaymentHistory': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetPaymentHistory,
+                    request_deserializer=cloud__storage__pb2.GetPaymentHistoryRequest.FromString,
+                    response_serializer=cloud__storage__pb2.GetPaymentHistoryResponse.SerializeToString,
+            ),
+            'CancelPayment': grpc.unary_unary_rpc_method_handler(
+                    servicer.CancelPayment,
+                    request_deserializer=cloud__storage__pb2.CancelPaymentRequest.FromString,
+                    response_serializer=cloud__storage__pb2.CancelPaymentResponse.SerializeToString,
+            ),
+            'ProcessWebhook': grpc.unary_unary_rpc_method_handler(
+                    servicer.ProcessWebhook,
+                    request_deserializer=cloud__storage__pb2.WebhookRequest.FromString,
+                    response_serializer=cloud__storage__pb2.WebhookResponse.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'cloudstorage.PaymentService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('cloudstorage.PaymentService', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class PaymentService(object):
+    """============================================================================
+    Payment Service
+    ============================================================================
+    """
+
+    @staticmethod
+    def GetStorageTiers(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cloudstorage.PaymentService/GetStorageTiers',
+            cloud__storage__pb2.GetStorageTiersRequest.SerializeToString,
+            cloud__storage__pb2.GetStorageTiersResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def InitiatePayment(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cloudstorage.PaymentService/InitiatePayment',
+            cloud__storage__pb2.InitiatePaymentRequest.SerializeToString,
+            cloud__storage__pb2.InitiatePaymentResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CheckPaymentStatus(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cloudstorage.PaymentService/CheckPaymentStatus',
+            cloud__storage__pb2.CheckPaymentStatusRequest.SerializeToString,
+            cloud__storage__pb2.CheckPaymentStatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetPaymentHistory(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cloudstorage.PaymentService/GetPaymentHistory',
+            cloud__storage__pb2.GetPaymentHistoryRequest.SerializeToString,
+            cloud__storage__pb2.GetPaymentHistoryResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CancelPayment(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cloudstorage.PaymentService/CancelPayment',
+            cloud__storage__pb2.CancelPaymentRequest.SerializeToString,
+            cloud__storage__pb2.CancelPaymentResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ProcessWebhook(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cloudstorage.PaymentService/ProcessWebhook',
+            cloud__storage__pb2.WebhookRequest.SerializeToString,
+            cloud__storage__pb2.WebhookResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+
+>>>>>>> Rest_api
 class NodeServiceStub(object):
     """============================================================================
     Node Service (Internal)
@@ -1122,6 +1421,24 @@ class AdminServiceStub(object):
                 request_serializer=cloud__storage__pb2.UserDetailsRequest.SerializeToString,
                 response_deserializer=cloud__storage__pb2.UserDetailsResponse.FromString,
                 _registered_method=True)
+<<<<<<< HEAD
+=======
+        self.GetPaymentStats = channel.unary_unary(
+                '/cloudstorage.AdminService/GetPaymentStats',
+                request_serializer=cloud__storage__pb2.PaymentStatsRequest.SerializeToString,
+                response_deserializer=cloud__storage__pb2.PaymentStatsResponse.FromString,
+                _registered_method=True)
+        self.GetAllPayments = channel.unary_unary(
+                '/cloudstorage.AdminService/GetAllPayments',
+                request_serializer=cloud__storage__pb2.GetAllPaymentsRequest.SerializeToString,
+                response_deserializer=cloud__storage__pb2.GetAllPaymentsResponse.FromString,
+                _registered_method=True)
+        self.RefundPayment = channel.unary_unary(
+                '/cloudstorage.AdminService/RefundPayment',
+                request_serializer=cloud__storage__pb2.RefundPaymentRequest.SerializeToString,
+                response_deserializer=cloud__storage__pb2.RefundPaymentResponse.FromString,
+                _registered_method=True)
+>>>>>>> Rest_api
 
 
 class AdminServiceServicer(object):
@@ -1166,6 +1483,27 @@ class AdminServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+<<<<<<< HEAD
+=======
+    def GetPaymentStats(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetAllPayments(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RefundPayment(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+>>>>>>> Rest_api
 
 def add_AdminServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -1199,6 +1537,24 @@ def add_AdminServiceServicer_to_server(servicer, server):
                     request_deserializer=cloud__storage__pb2.UserDetailsRequest.FromString,
                     response_serializer=cloud__storage__pb2.UserDetailsResponse.SerializeToString,
             ),
+<<<<<<< HEAD
+=======
+            'GetPaymentStats': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetPaymentStats,
+                    request_deserializer=cloud__storage__pb2.PaymentStatsRequest.FromString,
+                    response_serializer=cloud__storage__pb2.PaymentStatsResponse.SerializeToString,
+            ),
+            'GetAllPayments': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetAllPayments,
+                    request_deserializer=cloud__storage__pb2.GetAllPaymentsRequest.FromString,
+                    response_serializer=cloud__storage__pb2.GetAllPaymentsResponse.SerializeToString,
+            ),
+            'RefundPayment': grpc.unary_unary_rpc_method_handler(
+                    servicer.RefundPayment,
+                    request_deserializer=cloud__storage__pb2.RefundPaymentRequest.FromString,
+                    response_serializer=cloud__storage__pb2.RefundPaymentResponse.SerializeToString,
+            ),
+>>>>>>> Rest_api
     }
     generic_handler = grpc.method_handlers_generic_handler(
             'cloudstorage.AdminService', rpc_method_handlers)
@@ -1374,3 +1730,87 @@ class AdminService(object):
             timeout,
             metadata,
             _registered_method=True)
+<<<<<<< HEAD
+=======
+
+    @staticmethod
+    def GetPaymentStats(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cloudstorage.AdminService/GetPaymentStats',
+            cloud__storage__pb2.PaymentStatsRequest.SerializeToString,
+            cloud__storage__pb2.PaymentStatsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetAllPayments(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cloudstorage.AdminService/GetAllPayments',
+            cloud__storage__pb2.GetAllPaymentsRequest.SerializeToString,
+            cloud__storage__pb2.GetAllPaymentsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RefundPayment(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cloudstorage.AdminService/RefundPayment',
+            cloud__storage__pb2.RefundPaymentRequest.SerializeToString,
+            cloud__storage__pb2.RefundPaymentResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+>>>>>>> Rest_api
