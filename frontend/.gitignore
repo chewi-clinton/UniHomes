@@ -1,0 +1,28 @@
+# Ignore the node_modules directory
+node_modules/
+
+# Ignore build artifacts
+dist/
+build/
+
+# Ignore system files
+.DS_Store
+
+# Ignore logs and temporary files
+npm-debug.log*
+yarn-error.log*
+
+# Optionally ignore environment variable files if you have them
+.env
+.env.local
+
+# Ignore package-lock.json if you want to use yarn.lock instead
+# Otherwise, keep it if using npm
+# package-lock.json
+
+# Ignore specific IDE or editor files
+.vscode/
+.idea/
+
+# Ignore configuration files
+*.config.js
