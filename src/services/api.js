@@ -20,19 +20,14 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 // Response interceptor to handle errors
 api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Check if it's not an admin route
       if (!error.config.url.includes("/admin/")) {
         localStorage.removeItem("auth_token");
         localStorage.removeItem("user");
@@ -60,41 +55,27 @@ export const filesAPI = {
   uploadFile: (file, folderId, onProgress) => {
     const formData = new FormData();
     formData.append("file", file);
-    if (folderId) {
-      formData.append("folder_id", folderId);
-    }
+    if (folderId) formData.append("folder_id", folderId);
 
     return api.post("/files/upload", formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-      timeout: 600000, // 10 minutes for large files
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 600000,
       onUploadProgress: (progressEvent) => {
-        if (onProgress) {
-          const percentCompleted = Math.round(
+        if (onProgress && progressEvent.total) {
+          const percent = Math.round(
             (progressEvent.loaded * 100) / progressEvent.total
           );
-          onProgress(percentCompleted);
+          onProgress(percent);
         }
       },
     });
   },
 
-  downloadFile: (fileId) => {
-    console.log(`[API] Requesting download for file: ${fileId}`);
-    return api.get(`/files/download/${fileId}`, {
+  downloadFile: (fileId) =>
+    api.get(`/files/download/${fileId}`, {
       responseType: "blob",
-      timeout: 600000, // 10 minutes for large files
-      onDownloadProgress: (progressEvent) => {
-        if (progressEvent.total) {
-          const percentCompleted = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total
-          );
-          console.log(`[API] Download progress: ${percentCompleted}%`);
-        }
-      },
-    });
-  },
+      timeout: 600000,
+    }),
 
   deleteFile: (fileId, permanent = true) =>
     api.delete(`/files/${fileId}`, { params: { permanent } }),
@@ -102,7 +83,7 @@ export const filesAPI = {
   createFolder: (name, parentFolderId) =>
     api.post("/files/folders", {
       folder_name: name,
-      parent_folder_id: parentFolderId,
+      parent_folder_id: parentFolderId || null,
     }),
 
   shareFile: (fileId, shareWithEmail, permission = "read") =>
@@ -121,63 +102,45 @@ export const storageAPI = {
   getStorageUsage: () => api.get("/storage/usage"),
 };
 
+// Payment API - FULLY INTEGRATED
+export const paymentAPI = {
+  getTiers: () => api.get("/payment/tiers"),
+  initiatePayment: (tierId, provider, phoneNumber) =>
+    api.post("/payment/initiate", {
+      tier_id: tierId,
+      provider,
+      phone_number: phoneNumber,
+    }),
+  checkStatus: (paymentId) => api.get(`/payment/status/${paymentId}`),
+  getHistory: (limit = 50) =>
+    api.get("/payment/history", { params: { limit } }),
+  cancelPayment: (paymentId) => api.post(`/payment/cancel/${paymentId}`),
+
+  // Admin Payment Endpoints
+  getPaymentStats: (adminKey) =>
+    api.get("/payment/admin/stats", { headers: { "X-Admin-Key": adminKey } }),
+
+  getAllPayments: (adminKey, limit = 100, statusFilter = "") =>
+    api.get("/payment/admin/payments", {
+      headers: { "X-Admin-Key": adminKey },
+      params: { limit, status: statusFilter || undefined },
+    }),
+};
+
 // Admin API
 export const adminAPI = {
-  // Verify admin key
   verifyAdminKey: (adminKey) =>
     api.post("/admin/verify", { admin_key: adminKey }),
-
-  // Get system status
   getStatus: (adminKey) =>
-    api.get("/admin/status", {
-      headers: { "X-Admin-Key": adminKey },
-    }),
-
-  // List all users
+    api.get("/admin/status", { headers: { "X-Admin-Key": adminKey } }),
   getUsers: (adminKey) =>
-    api.get("/admin/users", {
-      headers: { "X-Admin-Key": adminKey },
-    }),
-
-  // List all storage nodes
+    api.get("/admin/users", { headers: { "X-Admin-Key": adminKey } }),
   getNodes: (adminKey) =>
-    api.get("/admin/nodes", {
-      headers: { "X-Admin-Key": adminKey },
-    }),
-
-  // Get user details
+    api.get("/admin/nodes", { headers: { "X-Admin-Key": adminKey } }),
   getUserDetails: (adminKey, userId) =>
-    api.get(`/admin/users/${userId}`, {
-      headers: { "X-Admin-Key": adminKey },
-    }),
-
-  // Stream system events (Server-Sent Events)
-  getEvents: (adminKey) => {
-    return new EventSource(
-      `${API_BASE_URL}/admin/events?admin_key=${adminKey}`
-    );
-  },
-
-  // Node management
-  createNode: (adminKey, nodeData) =>
-    api.post("/admin/nodes", nodeData, {
-      headers: { "X-Admin-Key": adminKey },
-    }),
-
-  startNode: (adminKey, nodeId, nodeData) =>
-    api.post(`/admin/nodes/${nodeId}/start`, nodeData, {
-      headers: { "X-Admin-Key": adminKey },
-    }),
-
-  stopNode: (adminKey, nodeId) =>
-    api.post(`/admin/nodes/${nodeId}/stop`, null, {
-      headers: { "X-Admin-Key": adminKey },
-    }),
-
-  deleteNode: (adminKey, nodeId) =>
-    api.delete(`/admin/nodes/${nodeId}`, {
-      headers: { "X-Admin-Key": adminKey },
-    }),
+    api.get(`/admin/users/${userId}`, { headers: { "X-Admin-Key": adminKey } }),
+  getEvents: (adminKey) =>
+    new EventSource(`${API_BASE_URL}/admin/events?admin_key=${adminKey}`),
 };
 
 export default api;

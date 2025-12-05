@@ -4,13 +4,16 @@ import { useAuth } from "./contexts/AuthContext";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import StoragePage from "./pages/StoragePage";
+import PaymentPage from "./pages/PaymentPage"; // NEW
 import AdminPage from "./pages/AdminPage";
 import AdminAuthPage from "./pages/AdminAuthPage";
-import AdminNodeManagerPage from "./pages/AdminNodeManagerPage"; // Add this line
+import AdminNodeManagerPage from "./pages/AdminNodeManagerPage";
+import AdminPaymentsPage from "./pages/AdminPaymentsPage"; // NEW
 import NotFoundPage from "./pages/NotFoundPage";
 import Layout from "./components/Layout";
 import SharedFilesPage from "./pages/SharedFilesPage";
 import LoadingSpinner from "./components/LoadingSpinner";
+
 // Protected Route Component for regular users
 const ProtectedRoute = () => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -65,6 +68,7 @@ function App() {
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/dashboard/:folderId" element={<DashboardPage />} />
             <Route path="/storage" element={<StoragePage />} />
+            <Route path="/purchase" element={<PaymentPage />} /> {/* NEW */}
           </Route>
         </Route>
 
@@ -73,6 +77,11 @@ function App() {
           <Route element={<AdminLayout />}>
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/admin/nodes" element={<AdminNodeManagerPage />} />
+            <Route
+              path="/admin/payments"
+              element={<AdminPaymentsPage />}
+            />{" "}
+            {/* NEW */}
           </Route>
         </Route>
 

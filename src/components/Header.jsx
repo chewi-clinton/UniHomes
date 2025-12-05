@@ -1,28 +1,90 @@
-import React, { useState } from 'react'
-import { Menu, Search, Moon, Sun, User, LogOut, Settings, UserCircle } from 'lucide-react'
-import { useAuth } from '../contexts/AuthContext'
-import { useTheme } from '../contexts/ThemeContext'
-import { useLocation, useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
+import React, { useState, useEffect } from "react";
+import {
+  Menu,
+  Search as SearchIcon,
+  Moon,
+  Sun,
+  UserCircle,
+  LogOut,
+  Settings,
+  User,
+} from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
+import { useTheme } from "../contexts/ThemeContext";
+import { useParams, useNavigate } from "react-router-dom";
+import { filesAPI } from "../services/api";
+import { toast } from "sonner";
 
-const Header = ({ onMenuClick }) => {
-  const [searchQuery, setSearchQuery] = useState('')
-  const [showUserMenu, setShowUserMenu] = useState(false)
-  const { user, logout } = useAuth()
-  const { theme, toggleTheme } = useTheme()
-  const location = useLocation()
-  const navigate = useNavigate()
+const Header = ({ onMenuClick, onSearch }) => {
+  // State for search
+  const [searchQuery, setSearchQuery] = useState("");
+  const [allFiles, setAllFiles] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  const handleSearch = (e) => {
-    e.preventDefault()
-    if (searchQuery.trim()) {
-      toast.info('Search functionality coming soon!')
+  // State for user menu dropdown
+  const [showUserMenu, setShowUserMenu] = useState(false); // This was missing!
+
+  const { folderId } = useParams();
+  const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  const navigate = useNavigate();
+
+  // Load files when folder changes
+  useEffect(() => {
+    loadCurrentFolderContents();
+  }, [folderId]);
+
+  const loadCurrentFolderContents = async () => {
+    try {
+      setLoading(true);
+      const response = await filesAPI.listFiles(folderId);
+      if (response.data.success) {
+        const data = response.data.data;
+        const folders = (data.folders || []).map((f) => ({
+          id: f.folder_id,
+          name: f.folder_name,
+          type: "folder",
+          created_at: f.created_at,
+          file_count: f.file_count,
+        }));
+        const files = (data.files || []).map((f) => ({
+          id: f.file_id,
+          name: f.filename,
+          type: "file",
+          size: f.file_size,
+          mime_type: f.mime_type,
+          created_at: f.created_at,
+          is_shared: f.is_shared,
+        }));
+        const combined = [...folders, ...files];
+        setAllFiles(combined);
+        setSearchQuery(""); // Clear search on folder change
+        onSearch?.(combined);
+      }
+    } catch (err) {
+      toast.error("Failed to load folder contents");
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-  }
+  };
+
+  // Filter files when search query changes
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      onSearch?.(allFiles);
+      return;
+    }
+    const filtered = allFiles.filter((item) =>
+      item.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    onSearch?.(filtered);
+  }, [searchQuery, allFiles, onSearch]);
 
   const handleLogout = async () => {
-    await logout()
-  }
+    setShowUserMenu(false);
+    await logout();
+  };
 
   return (
     <header className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
@@ -35,20 +97,8 @@ const Header = ({ onMenuClick }) => {
           >
             <Menu className="w-5 h-5" />
           </button>
-          
-          {/* Search */}
-          <form onSubmit={handleSearch} className="hidden md:block">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search files..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2 w-64 bg-accent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary transition-all"
-              />
-            </div>
-          </form>
+
+          {/* Search Input */}
         </div>
 
         {/* Right side */}
@@ -58,7 +108,7 @@ const Header = ({ onMenuClick }) => {
             onClick={toggleTheme}
             className="p-2 rounded-lg hover:bg-accent transition-colors"
           >
-            {theme === 'light' ? (
+            {theme === "light" ? (
               <Moon className="w-5 h-5" />
             ) : (
               <Sun className="w-5 h-5" />
@@ -77,30 +127,30 @@ const Header = ({ onMenuClick }) => {
               </span>
             </button>
 
-            {/* Dropdown menu */}
+            {/* Dropdown */}
             {showUserMenu && (
-              <div className="absolute right-0 mt-2 w-48 bg-popover border rounded-lg shadow-lg py-2 animate-scale-in">
+              <div className="absolute right-0 mt-2 w-48 bg-popover border rounded-lg shadow-lg py-2 z-50">
                 <div className="px-4 py-2 border-b">
                   <p className="text-sm font-medium">{user?.name}</p>
                   <p className="text-xs text-muted-foreground">{user?.email}</p>
                 </div>
-                
+
                 <button
                   onClick={() => {
-                    setShowUserMenu(false)
-                    navigate('/storage')
+                    setShowUserMenu(false);
+                    navigate("/storage");
                   }}
                   className="w-full px-4 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center space-x-2"
                 >
                   <Settings className="w-4 h-4" />
                   <span>Storage</span>
                 </button>
-                
-                {user?.role === 'admin' && (
+
+                {user?.role === "admin" && (
                   <button
                     onClick={() => {
-                      setShowUserMenu(false)
-                      navigate('/admin')
+                      setShowUserMenu(false);
+                      navigate("/admin");
                     }}
                     className="w-full px-4 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center space-x-2"
                   >
@@ -108,7 +158,7 @@ const Header = ({ onMenuClick }) => {
                     <span>Admin Panel</span>
                   </button>
                 )}
-                
+
                 <div className="border-t mt-2 pt-2">
                   <button
                     onClick={handleLogout}
@@ -124,7 +174,7 @@ const Header = ({ onMenuClick }) => {
         </div>
       </div>
     </header>
-  )
-}
+  );
+};
 
-export default Header
+export default Header;
