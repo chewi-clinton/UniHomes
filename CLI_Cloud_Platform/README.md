@@ -5,51 +5,54 @@ A distributed cloud storage system with integrated payment processing, built wit
 ![postgresql](image-8.png)
 ![MIT](image-9.png)
 
-📋 Table of Contents
+## 📌 Table of Contents
+- [Features](#-features)
+- [Architecture](#-architecture)
+- [Prerequisites](#-prerequisites)
+- [Installation](#-installation)
+- [Configuration](#️-configuration)
+- [Usage](#-usage)
+- [API Documentation](#-api-documentation)
+- [Sequence Diagrams](#-sequence-diagrams)
+- [Project Structure](#-project-structure)
+- [Payment Integration](#-payment-integration)
+- [Development](#-development)
+- [Troubleshooting](#-troubleshooting)
+- [Performance Considerations](#-performance-considerations)
+- [Security](#-security)
+- [Deployment](#-deployment)
+- [Contributing](#-contributing)
+- [License](#-license)
 
-Features
-Architecture
-Prerequisites
-Installation
-Configuration
-Usage
-API Documentation
-Sequence Diagrams
-Project Structure
-Payment Integration
-Contributing
-License
+---
 
-✨ Features
-Core Storage Features
+## ✨ Features
+### **Core Storage**
 
-Distributed File Storage: Files are split into chunks and distributed across multiple storage nodes
-Automatic Replication: Configurable replication factor for data redundancy
-Dynamic Storage Allocation: Storage capacity grows automatically as nodes are added
-File Sharing: Share files with other users with configurable permissions
-Folder Organization: Organize files in hierarchical folder structures
-Soft Delete: Files can be moved to trash before permanent deletion
+-Distributed File Storage: Files are split into chunks and distributed across multiple storage nodes
+-Automatic Replication: Configurable replication factor for data redundancy
+-Dynamic Storage Allocation: Storage capacity grows automatically as nodes are added
+-File Sharing: Share files with other users with configurable permissions
+-Folder Organization: Organize files in hierarchical folder structures
+-Soft Delete: Files can be moved to trash before permanent deletion
 
-Security & Authentication
+### **Security**
+- OTP-based authentication via Gmail  
+- Expiring session tokens  
+- Full user data isolation  
 
-OTP-Based Authentication: Email-based one-time password verification
-Session Management: Secure session tokens with automatic expiration
-User Isolation: Each user's data is completely isolated
+### **Payment System**
+- MTN MoMo & Orange Money (Cameroon)  
+- Campay API integration  
+- Storage tiers (250MB → 2GB, customizable)  
+- Payment history + automatic storage upgrade  
+- Demo mode for testing  
 
-Payment System
-
-Mobile Money Integration: Support for MTN Mobile Money and Orange Money (Cameroon)
-Campay API: Integrated payment gateway for Cameroon
-Flexible Storage Tiers: Multiple storage packages from 250MB to 2GB
-Payment History: Complete transaction tracking and history
-Demo Mode: Test payments without real transactions
-
-Administration
-
-Real-time Monitoring: Live event streaming for system activities
-System Statistics: Comprehensive dashboard showing storage, users, and nodes
-Node Health Tracking: Automatic detection of offline nodes
-Payment Analytics: Revenue and transaction statistics
+### **Administration**
+- Real-time event monitoring  
+- System-wide statistics  
+- Node health tracking  
+- Payment analytics  
 
 🏗 Architecture
 System Components
