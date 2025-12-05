@@ -245,6 +245,107 @@ message StorageUsageResponse {
 }
 
 // ============================================================================
+// Payment Service
+// ============================================================================
+service PaymentService {
+  rpc GetStorageTiers (GetStorageTiersRequest) returns (GetStorageTiersResponse);
+  rpc InitiatePayment (InitiatePaymentRequest) returns (InitiatePaymentResponse);
+  rpc CheckPaymentStatus (CheckPaymentStatusRequest) returns (CheckPaymentStatusResponse);
+  rpc GetPaymentHistory (GetPaymentHistoryRequest) returns (GetPaymentHistoryResponse);
+  rpc CancelPayment (CancelPaymentRequest) returns (CancelPaymentResponse);
+  rpc ProcessWebhook (WebhookRequest) returns (WebhookResponse);
+}
+
+message GetStorageTiersRequest {
+  // Empty - returns all active tiers
+}
+
+message GetStorageTiersResponse {
+  bool success = 1;
+  repeated StorageTier tiers = 2;
+}
+
+message StorageTier {
+  string tier_id = 1;
+  string name = 2;
+  string display_name = 3;
+  int64 storage_bytes = 4;
+  int32 price_xaf = 5;
+  string description = 6;
+}
+
+message InitiatePaymentRequest {
+  string session_token = 1;
+  string tier_id = 2;
+  string provider = 3;  // "mtn_momo" or "orange_money"
+  string phone_number = 4;
+}
+
+message InitiatePaymentResponse {
+  bool success = 1;
+  string message = 2;
+  string payment_id = 3;
+  string transaction_ref = 4;
+  string payment_url = 5;  // URL for user to complete payment
+  int32 amount_xaf = 6;
+}
+
+message CheckPaymentStatusRequest {
+  string session_token = 1;
+  string payment_id = 2;
+}
+
+message CheckPaymentStatusResponse {
+  bool success = 1;
+  string payment_id = 2;
+  string status = 3;  // pending, processing, completed, failed
+  string message = 4;
+  int64 storage_added = 5;  // bytes added if completed
+}
+
+message GetPaymentHistoryRequest {
+  string session_token = 1;
+  int32 limit = 2;  // Max number of records
+}
+
+message GetPaymentHistoryResponse {
+  bool success = 1;
+  repeated PaymentRecord payments = 2;
+}
+
+message PaymentRecord {
+  string payment_id = 1;
+  string tier_name = 2;
+  int32 amount_xaf = 3;
+  int64 storage_bytes = 4;
+  string provider = 5;
+  string status = 6;
+  string created_at = 7;
+  string completed_at = 8;
+}
+
+message CancelPaymentRequest {
+  string session_token = 1;
+  string payment_id = 2;
+}
+
+message CancelPaymentResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message WebhookRequest {
+  string external_ref = 1;
+  string status = 2;
+  string raw_data = 3;  // JSON string
+}
+
+message WebhookResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ============================================================================
 // Node Service (Internal)
 // ============================================================================
 service NodeService {
@@ -329,6 +430,9 @@ service AdminService {
   rpc ListAllUsers (ListUsersRequest) returns (ListUsersResponse);
   rpc ListAllNodes (ListNodesRequest) returns (ListNodesResponse);
   rpc GetUserDetails (UserDetailsRequest) returns (UserDetailsResponse);
+  rpc GetPaymentStats (PaymentStatsRequest) returns (PaymentStatsResponse);
+  rpc GetAllPayments (GetAllPaymentsRequest) returns (GetAllPaymentsResponse);
+  rpc RefundPayment (RefundPaymentRequest) returns (RefundPaymentResponse);
 }
 
 message SystemStatusRequest {
@@ -422,4 +526,54 @@ message UserDetailsResponse {
   bool success = 1;
   UserInfo user = 2;
   repeated FileEntry files = 3;
+}
+
+message PaymentStatsRequest {
+  string admin_key = 1;
+}
+
+message PaymentStatsResponse {
+  bool success = 1;
+  int64 total_payments = 2;
+  int64 completed_payments = 3;
+  int64 pending_payments = 4;
+  int64 failed_payments = 5;
+  int64 total_revenue_xaf = 6;
+  int64 total_storage_sold_bytes = 7;
+}
+
+message GetAllPaymentsRequest {
+  string admin_key = 1;
+  int32 limit = 2;
+  string status_filter = 3;  // Optional filter
+}
+
+message GetAllPaymentsResponse {
+  bool success = 1;
+  repeated AdminPaymentRecord payments = 2;
+}
+
+message AdminPaymentRecord {
+  string payment_id = 1;
+  string user_email = 2;
+  string tier_name = 3;
+  int32 amount_xaf = 4;
+  int64 storage_bytes = 5;
+  string provider = 6;
+  string phone_number = 7;
+  string status = 8;
+  string transaction_ref = 9;
+  string created_at = 10;
+  string completed_at = 11;
+}
+
+message RefundPaymentRequest {
+  string admin_key = 1;
+  string payment_id = 2;
+  string reason = 3;
+}
+
+message RefundPaymentResponse {
+  bool success = 1;
+  string message = 2;
 }

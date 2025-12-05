@@ -5,6 +5,8 @@ import os
 import queue
 import threading
 from datetime import datetime, timezone, timedelta
+import json
+import traceback
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -69,6 +71,7 @@ def emit_event(event_type, message, user_id=None, details=None):
                 metadatas={'details': details} if details else {}
             )
             session.add(db_event)
+            session.commit()
         print(f"[EVENT] {event_type}: {message}")
     except Exception as e:
         print(f"[ERROR] Failed to log event: {e}")
@@ -162,18 +165,243 @@ class AuthServiceServicer(cloud_storage_pb2_grpc.AuthServiceServicer):
         )
 
 
+class PaymentServiceServicer(cloud_storage_pb2_grpc.PaymentServiceServicer):
+    """Payment Service Implementation"""
+   
+    def _get_user_from_session_token(self, session_token, db_session):
+        """Get user from session token"""
+        from db.models import Session as DBSession, User
+        db_session_obj = db_session.query(DBSession).filter_by(session_token=session_token).first()
+        if not db_session_obj:
+            return None
+        user = db_session.query(User).filter_by(user_id=db_session_obj.user_id).first()
+        return user
+   
+    def GetStorageTiers(self, request, context):
+        """Get all available storage tiers"""
+        try:
+            from payment.payment_manager import payment_manager
+           
+            tiers = payment_manager.get_storage_tiers()
+           
+            tier_messages = []
+            for tier in tiers:
+                tier_messages.append(cloud_storage_pb2.StorageTier(
+                    tier_id=tier['tier_id'],
+                    name=tier['name'],
+                    display_name=tier['display_name'],
+                    storage_bytes=tier['storage_bytes'],
+                    price_xaf=tier['price_xaf'],
+                    description=tier.get('description', '')
+                ))
+           
+            return cloud_storage_pb2.GetStorageTiersResponse(
+                success=True,
+                tiers=tier_messages
+            )
+       
+        except Exception as e:
+            print(f"[ERROR] Get tiers failed: {e}")
+            context.abort(grpc.StatusCode.INTERNAL, str(e))
+   
+    def InitiatePayment(self, request, context):
+        """Initiate a payment for storage purchase"""
+        try:
+            session_token = request.session_token
+            tier_id = request.tier_id
+            provider = request.provider
+            phone_number = request.phone_number
+           
+            # Validate session and get user
+            with get_db_session() as db_session:
+                user = self._get_user_from_session_token(session_token, db_session)
+                if not user:
+                    context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
+               
+                user_id = user.user_id
+                user_email = user.email
+           
+            print(f"[PAYMENT] User {user_email} initiating payment")
+            print(f"[PAYMENT] Tier: {tier_id}, Provider: {provider}, Phone: {phone_number}")
+           
+            # Initiate payment
+            from payment.payment_manager import payment_manager
+            success, message, data = payment_manager.initiate_payment(
+                user_id, tier_id, provider, phone_number
+            )
+           
+            if success and data:
+                emit_event(
+                    'PAYMENT_INITIATED',
+                    f'Payment initiated: {data["amount_xaf"]} XAF',
+                    user_id=user_id,
+                    details=data['payment_id']
+                )
+               
+                return cloud_storage_pb2.InitiatePaymentResponse(
+                    success=True,
+                    message=message,
+                    payment_id=data['payment_id'],
+                    transaction_ref=data['transaction_ref'],
+                    payment_url='', # Not used with Campay direct collection
+                    amount_xaf=data['amount_xaf']
+                )
+            else:
+                context.abort(grpc.StatusCode.FAILED_PRECONDITION, message)
+       
+        except Exception as e:
+            print(f"[ERROR] Initiate payment failed: {e}")
+            traceback.print_exc()
+            context.abort(grpc.StatusCode.INTERNAL, str(e))
+   
+    def CheckPaymentStatus(self, request, context):
+        """Check payment status"""
+        try:
+            session_token = request.session_token
+            payment_id = request.payment_id
+           
+            with get_db_session() as db_session:
+                user = self._get_user_from_session_token(session_token, db_session)
+                if not user:
+                    context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
+               
+                user_id = user.user_id
+           
+            from payment.payment_manager import payment_manager
+            success, status, data = payment_manager.check_payment_status(payment_id, user_id)
+           
+            if not success:
+                context.abort(grpc.StatusCode.NOT_FOUND, status)
+           
+            if data and status == 'completed':
+                emit_event(
+                    'PAYMENT_COMPLETED',
+                    f'Payment completed: {data["amount_xaf"]} XAF',
+                    user_id=user_id,
+                    details=payment_id
+                )
+           
+            return cloud_storage_pb2.CheckPaymentStatusResponse(
+                success=True,
+                payment_id=payment_id,
+                status=data['status'],
+                message=data['message'],
+                storage_added=data['storage_bytes']
+            )
+       
+        except Exception as e:
+            print(f"[ERROR] Check payment status failed: {e}")
+            context.abort(grpc.StatusCode.INTERNAL, str(e))
+   
+    def GetPaymentHistory(self, request, context):
+        """Get payment history for user"""
+        try:
+            session_token = request.session_token
+            limit = request.limit if request.limit > 0 else 50
+           
+            with get_db_session() as db_session:
+                user = self._get_user_from_session_token(session_token, db_session)
+                if not user:
+                    context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
+               
+                user_id = user.user_id
+           
+            from payment.payment_manager import payment_manager
+            payments = payment_manager.get_payment_history(user_id, limit)
+           
+            payment_records = []
+            for p in payments:
+                payment_records.append(cloud_storage_pb2.PaymentRecord(
+                    payment_id=p['payment_id'],
+                    tier_name=p['tier_name'],
+                    amount_xaf=p['amount_xaf'],
+                    storage_bytes=p['storage_bytes'],
+                    provider=p['provider'],
+                    status=p['status'],
+                    created_at=p['created_at'],
+                    completed_at=p['completed_at'] or ''
+                ))
+           
+            return cloud_storage_pb2.GetPaymentHistoryResponse(
+                success=True,
+                payments=payment_records
+            )
+       
+        except Exception as e:
+            print(f"[ERROR] Get payment history failed: {e}")
+            context.abort(grpc.StatusCode.INTERNAL, str(e))
+   
+    def CancelPayment(self, request, context):
+        """Cancel a pending payment"""
+        try:
+            session_token = request.session_token
+            payment_id = request.payment_id
+           
+            with get_db_session() as db_session:
+                user = self._get_user_from_session_token(session_token, db_session)
+                if not user:
+                    context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
+               
+                user_id = user.user_id
+           
+            from payment.payment_manager import payment_manager
+            success, message = payment_manager.cancel_payment(payment_id, user_id)
+           
+            if success:
+                emit_event(
+                    'PAYMENT_CANCELLED',
+                    f'Payment cancelled: {payment_id}',
+                    user_id=user_id
+                )
+               
+                return cloud_storage_pb2.CancelPaymentResponse(
+                    success=True,
+                    message=message
+                )
+            else:
+                context.abort(grpc.StatusCode.FAILED_PRECONDITION, message)
+       
+        except Exception as e:
+            print(f"[ERROR] Cancel payment failed: {e}")
+            context.abort(grpc.StatusCode.INTERNAL, str(e))
+   
+    def ProcessWebhook(self, request, context):
+        """Process payment webhook from Campay"""
+        try:
+            external_ref = request.external_ref
+            status = request.status
+            raw_data = request.raw_data
+           
+            print(f"[WEBHOOK] Processing: ref={external_ref}, status={status}")
+           
+            data = json.loads(raw_data) if raw_data else {}
+           
+            from payment.payment_manager import payment_manager
+            success, message = payment_manager.process_webhook(external_ref, status, data)
+           
+            return cloud_storage_pb2.WebhookResponse(
+                success=success,
+                message=message
+            )
+       
+        except Exception as e:
+            print(f"[ERROR] Webhook processing failed: {e}")
+            traceback.print_exc()
+            return cloud_storage_pb2.WebhookResponse(
+                success=False,
+                message=f"Webhook error: {str(e)}"
+            )
+
+
 class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
     """File Service Implementation"""
     
     def _get_user_from_session_token(self, session_token, db_session):
         """Get user from session token within the provided database session"""
         from db.models import Session as DBSession, User
-        # First get the session from the database
         db_session_obj = db_session.query(DBSession).filter_by(session_token=session_token).first()
         if not db_session_obj:
             return None
-        
-        # Then get the user associated with this session
         user = db_session.query(User).filter_by(user_id=db_session_obj.user_id).first()
         return user
     
@@ -184,7 +412,6 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
         """
         from db.models import File, FileShare, User
         
-        # First check if file exists and is not deleted
         file = db_session.query(File).filter_by(
             file_id=file_id,
             deleted_at=None
@@ -194,7 +421,6 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             print(f"[ACCESS_CHECK] File {file_id} not found or deleted")
             return False, None, False
         
-        # Check if user is the owner
         if file.user_id == user_id:
             print(f"[ACCESS_CHECK] User {user_id} is owner of file {file_id}")
             file_info = {
@@ -208,14 +434,12 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             }
             return True, file_info, True
         
-        # Check if file is shared with this user
         share = db_session.query(FileShare).filter_by(
             file_id=file_id,
             shared_with_user_id=user_id
         ).first()
         
         if share:
-            # Check if share has expired
             if share.expires_at and share.expires_at < datetime.utcnow():
                 print(f"[ACCESS_CHECK] Share expired for user {user_id} on file {file_id}")
                 return False, None, False
@@ -238,7 +462,6 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
     def UploadFile(self, request_iterator, context):
         """Handle file upload with streaming"""
         try:
-            # First message contains metadata
             first_request = next(request_iterator)
             
             if not first_request.HasField('metadata'):
@@ -251,9 +474,7 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             mime_type = metadata.mime_type
             parent_folder_id = metadata.parent_folder_id if metadata.parent_folder_id else None
             
-            # Create a new database session for the entire operation
             with get_db_session() as db_session:
-                # Get user from session token within this session
                 user = self._get_user_from_session_token(session_token, db_session)
                 if not user:
                     context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
@@ -261,13 +482,11 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
                 user_id = user.user_id
                 user_email = user.email
                 
-                # Check storage quota
                 if not user_manager.check_storage_available(user_id, file_size):
                     context.abort(grpc.StatusCode.RESOURCE_EXHAUSTED, "Storage quota exceeded")
                 
                 print(f"[UPLOAD] Starting: {filename} ({file_size} bytes) for user {user_email}")
                 
-                # Receive file data
                 file_data = b''
                 for request in request_iterator:
                     if request.HasField('chunk_data'):
@@ -275,7 +494,6 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
                 
                 print(f"[UPLOAD] Received {len(file_data)} bytes")
                 
-                # Create file metadata
                 success, message, file_id = file_manager.create_file(
                     user_id,
                     filename,
@@ -287,22 +505,18 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
                 if not success:
                     context.abort(grpc.StatusCode.INTERNAL, message)
                 
-                # Split into chunks
                 chunks = split_file_into_chunks(file_data, num_chunks=4)
                 print(f"[UPLOAD] Split into {len(chunks)} chunks")
                 
-                # Select nodes for chunks
                 node_mapping, error = chunk_distributor.select_nodes_for_chunks(len(chunks), replication_factor=1)
                 if error:
                     context.abort(grpc.StatusCode.UNAVAILABLE, error)
                 
-                # Store chunks on nodes
                 chunks_stored = 0
                 for i, chunk_data in enumerate(chunks):
                     chunk_checksum = calculate_checksum(chunk_data)
                     node_info = node_mapping[i]
                     
-                    # Store chunk on primary node
                     success = self._store_chunk_on_node(
                         node_info['primary_host'],
                         node_info['primary_port'],
@@ -313,7 +527,6 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
                     )
                     
                     if success:
-                        # Add chunk metadata
                         file_manager.add_chunk(
                             file_id,
                             i,
@@ -327,7 +540,6 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
                     else:
                         print(f"[ERROR] Failed to store chunk {i}")
                 
-                # Update user storage
                 user_manager.update_storage_usage(user_id, file_size)
                 
                 emit_event(
@@ -348,7 +560,6 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, "No data received")
         except Exception as e:
             print(f"[ERROR] Upload failed: {e}")
-            import traceback
             traceback.print_exc()
             context.abort(grpc.StatusCode.INTERNAL, str(e))
     
@@ -374,48 +585,35 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             return False
         
     def _delete_chunk_from_node(self, chunk_id, node_id, host, port):
-        
-            try:
-                print(f"[DELETE_CHUNK] Attempting to delete chunk {chunk_id} from node {node_id} at {host}:{port}")
-                
-                # Connect to the storage node
-                channel = grpc.insecure_channel(f'{host}:{port}')
-                stub = cloud_storage_pb2_grpc.NodeServiceStub(channel)
-                
-                # Send delete request
-                response = stub.DeleteChunk(cloud_storage_pb2.DeleteChunkRequest(
-                    chunk_id=chunk_id
-                ))
-                
-                channel.close()
-                
-                if response.success:
-                    print(f"[DELETE_CHUNK] ✓ Successfully deleted chunk {chunk_id} from node {node_id}")
-                    return True
-                else:
-                    print(f"[DELETE_CHUNK] ✗ Failed to delete chunk {chunk_id} from node {node_id}: {response.message}")
-                    return False
-            
-            except grpc.RpcError as e:
-                print(f"[ERROR] gRPC error deleting chunk {chunk_id} from node {node_id}: {e.details()}")
+        try:
+            print(f"[DELETE_CHUNK] Attempting to delete chunk {chunk_id} from node {node_id} at {host}:{port}")
+            channel = grpc.insecure_channel(f'{host}:{port}')
+            stub = cloud_storage_pb2_grpc.NodeServiceStub(channel)
+            response = stub.DeleteChunk(cloud_storage_pb2.DeleteChunkRequest(chunk_id=chunk_id))
+            channel.close()
+            if response.success:
+                print(f"[DELETE] Successfully deleted chunk {chunk_id} from node {node_id}")
+                return True
+            else:
+                print(f"[DELETE] Failed to delete chunk {chunk_id} from node {node_id}: {response.message}")
                 return False
-            except Exception as e:
-                print(f"[ERROR] Failed to delete chunk {chunk_id} from node {node_id}: {e}")
-                import traceback
-                traceback.print_exc()
-                return False
+        except grpc.RpcError as e:
+            print(f"[ERROR] gRPC error deleting chunk {chunk_id} from node {node_id}: {e.details()}")
+            return False
+        except Exception as e:
+            print(f"[ERROR] Failed to delete chunk {chunk_id} from node {node_id}: {e}")
+            traceback.print_exc()
+            return False
             
     def DownloadFile(self, request, context):
-        """Handle file download with streaming - FIXED: Now supports shared files"""
+        """Handle file download with streaming - supports shared files"""
         try:
             session_token = request.session_token
             file_id = request.file_id
             
             print(f"[DOWNLOAD] Request received for file: {file_id}")
             
-            # Create a new database session for the entire operation
             with get_db_session() as db_session:
-                # Get user from session token within this session
                 user = self._get_user_from_session_token(session_token, db_session)
                 if not user:
                     print(f"[ERROR] Invalid session token: {session_token}")
@@ -426,7 +624,6 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
                 
                 print(f"[DOWNLOAD] User {user_email} ({user_id}) requesting file {file_id}")
                 
-                # FIXED: Check if user has access (owns or has shared access)
                 has_access, file_info, is_owner = self._check_file_access(file_id, user_id, db_session)
                 
                 if not has_access:
@@ -436,15 +633,9 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
                 access_type = "owner" if is_owner else "shared"
                 print(f"[DOWNLOAD] Starting: {file_info['filename']} for user {user_email} (access: {access_type})")
                 
-                # Get chunks
                 chunks = file_manager.get_file_chunks(file_id)
                 print(f"[DOWNLOAD] Found {len(chunks)} chunks for file {file_id}")
                 
-                # Log chunk details
-                for i, chunk in enumerate(chunks):
-                    print(f"[CHUNK] Chunk {i}: {chunk}")
-                
-                # Send file info first
                 yield cloud_storage_pb2.DownloadFileResponse(
                     file_info=cloud_storage_pb2.FileInfo(
                         filename=file_info['filename'],
@@ -454,13 +645,12 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
                     )
                 )
                 
-                # Stream chunks
                 for chunk_info in chunks:
                     print(f"[DOWNLOAD] Retrieving chunk {chunk_info['chunk_index']}")
                     chunk_data = self._retrieve_chunk_from_node(chunk_info, file_id)
                     
                     if chunk_data:
-                        print(f"[DOWNLOAD] Successfully retrieved chunk {chunk_info['chunk_index']} ({len(chunk_data)} bytes)")
+                        print(f"[DOWNLOAD] Retrieved chunk {chunk_info['chunk_index']} ({len(chunk_data)} bytes)")
                         yield cloud_storage_pb2.DownloadFileResponse(
                             chunk_data=chunk_data
                         )
@@ -479,28 +669,23 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
         
         except Exception as e:
             print(f"[ERROR] Download failed: {e}")
-            import traceback
             traceback.print_exc()
             context.abort(grpc.StatusCode.INTERNAL, str(e))
     
     def _retrieve_chunk_from_node(self, chunk_info, file_id):
         """Retrieve chunk from storage node"""
         try:
-            # Get the chunk index from the chunk info
             chunk_index = chunk_info.get('chunk_index')
-            
             if chunk_index is None:
-                print(f"[CHUNK] Missing chunk_index in chunk_info")
+                print(f"[CHUNK] Missing chunk_index")
                 return None
             
-            # Construct the chunk ID in the format expected by the storage node
             chunk_id = f"{file_id}_chunk_{chunk_index}"
             print(f"[CHUNK] Retrieving chunk {chunk_id}")
             
             node_info, error = chunk_distributor.get_node_for_retrieval(chunk_info['chunk_id'])
-            
             if error:
-                print(f"[CHUNK] Error getting node for retrieval: {error}")
+                print(f"[CHUNK] Error: {error}")
                 return None
             
             print(f"[CHUNK] Using node {node_info['host']}:{node_info['port']}")
@@ -515,15 +700,14 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             channel.close()
             
             if response.success:
-                print(f"[CHUNK] Successfully retrieved chunk {chunk_id} ({len(response.chunk_data)} bytes)")
+                print(f"[CHUNK] Retrieved chunk {chunk_id} ({len(response.chunk_data)} bytes)")
                 return response.chunk_data
             else:
-                print(f"[CHUNK] Node returned error for chunk {chunk_id}: {response.message}")
+                print(f"[CHUNK] Node error: {response.message}")
                 return None
         
         except Exception as e:
-            print(f"[ERROR] Failed to retrieve chunk: {e}")
-            import traceback
+            print(f"[ERROR] Retrieve chunk failed: {e}")
             traceback.print_exc()
             return None
     
@@ -534,9 +718,7 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             folder_id = request.folder_id if request.folder_id else None
             include_deleted = request.include_deleted
             
-            # Create a new database session for the entire operation
             with get_db_session() as db_session:
-                # Get user from session token within this session
                 user = self._get_user_from_session_token(session_token, db_session)
                 if not user:
                     context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
@@ -545,7 +727,6 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
                 
                 success, files, folders = file_manager.list_files(user_id, folder_id, include_deleted)
                 
-                # Convert to protobuf
                 file_entries = []
                 for file in files:
                     file_entries.append(cloud_storage_pb2.FileEntry(
@@ -577,11 +758,6 @@ class FileServiceServicer(cloud_storage_pb2_grpc.FileServiceServicer):
             print(f"[ERROR] List files failed: {e}")
             context.abort(grpc.StatusCode.INTERNAL, str(e))
     
-    """
-UPDATED SECTION FOR cloud_server.py
-Replace the DeleteFile method and _delete_chunk_from_nodes method in FileServiceServicer class
-"""
-
     def DeleteFile(self, request, context):
         """Delete file - now properly deletes chunks from storage nodes"""
         try:
@@ -591,9 +767,7 @@ Replace the DeleteFile method and _delete_chunk_from_nodes method in FileService
             
             print(f"[gRPC] DeleteFile request: file_id={file_id}, permanent={permanent}")
             
-            # Create a new database session for the entire operation
             with get_db_session() as db_session:
-                # Get user from session token within this session
                 user = self._get_user_from_session_token(session_token, db_session)
                 if not user:
                     context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
@@ -602,7 +776,6 @@ Replace the DeleteFile method and _delete_chunk_from_nodes method in FileService
                 
                 print(f"[gRPC] User {user_id} deleting file {file_id}")
                 
-                # Delete file and get chunk info with node details
                 success, message, chunk_info = file_manager.delete_file(file_id, user_id, permanent)
                 
                 if not success:
@@ -611,7 +784,6 @@ Replace the DeleteFile method and _delete_chunk_from_nodes method in FileService
                 
                 print(f"[gRPC] File deleted from database: {message}")
                 
-                # If permanent delete, remove chunks from storage nodes
                 if permanent and chunk_info:
                     print(f"[gRPC] Deleting {len(chunk_info)} chunks from storage nodes...")
                     
@@ -621,7 +793,6 @@ Replace the DeleteFile method and _delete_chunk_from_nodes method in FileService
                     for chunk in chunk_info:
                         chunk_id = chunk['chunk_id']
                         
-                        # Delete from primary node
                         if chunk['node_host'] and chunk['node_port']:
                             print(f"[gRPC] Deleting chunk {chunk_id} from primary node {chunk['node_id']}")
                             success = self._delete_chunk_from_node(
@@ -635,7 +806,6 @@ Replace the DeleteFile method and _delete_chunk_from_nodes method in FileService
                             else:
                                 failed_count += 1
                         
-                        # Delete from replica nodes
                         for replica in chunk.get('replica_nodes', []):
                             if replica['node_host'] and replica['node_port']:
                                 print(f"[gRPC] Deleting chunk {chunk_id} from replica node {replica['node_id']}")
@@ -666,21 +836,16 @@ Replace the DeleteFile method and _delete_chunk_from_nodes method in FileService
         
         except Exception as e:
             print(f"[ERROR] Delete file failed: {e}")
-            import traceback
             traceback.print_exc()
             context.abort(grpc.StatusCode.INTERNAL, str(e))
-
-
     
-    def GetFilemetadatas(self, request, context):
+    def GetFileMetadata(self, request, context):
         """Get file metadata"""
         try:
             session_token = request.session_token
             file_id = request.file_id
             
-            # Create a new database session for the entire operation
             with get_db_session() as db_session:
-                # Get user from session token within this session
                 user = self._get_user_from_session_token(session_token, db_session)
                 if not user:
                     context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
@@ -693,7 +858,7 @@ Replace the DeleteFile method and _delete_chunk_from_nodes method in FileService
                 
                 chunks = file_manager.get_file_chunks(file_id)
                 
-                return cloud_storage_pb2.FilemetadatasResponse(
+                return cloud_storage_pb2.FileMetadataResponse(
                     success=True,
                     file=cloud_storage_pb2.FileEntry(
                         file_id=file_info['file_id'],
@@ -718,9 +883,7 @@ Replace the DeleteFile method and _delete_chunk_from_nodes method in FileService
             folder_name = request.folder_name
             parent_folder_id = request.parent_folder_id if request.parent_folder_id else None
             
-            # Create a new database session for the entire operation
             with get_db_session() as db_session:
-                # Get user from session token within this session
                 user = self._get_user_from_session_token(session_token, db_session)
                 if not user:
                     context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
@@ -750,9 +913,7 @@ Replace the DeleteFile method and _delete_chunk_from_nodes method in FileService
             share_with_email = request.share_with_email
             permission = request.permission
             
-            # Create a new database session for the entire operation
             with get_db_session() as db_session:
-                # Get user from session token within this session
                 user = self._get_user_from_session_token(session_token, db_session)
                 if not user:
                     context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
@@ -781,9 +942,7 @@ Replace the DeleteFile method and _delete_chunk_from_nodes method in FileService
         try:
             session_token = request.session_token
             
-            # Create a new database session for the entire operation
             with get_db_session() as db_session:
-                # Get user from session token within this session
                 user = self._get_user_from_session_token(session_token, db_session)
                 if not user:
                     context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
@@ -811,18 +970,16 @@ Replace the DeleteFile method and _delete_chunk_from_nodes method in FileService
             print(f"[ERROR] Get shared files failed: {e}")
             context.abort(grpc.StatusCode.INTERNAL, str(e))
 
+
 class StorageServiceServicer(cloud_storage_pb2_grpc.StorageServiceServicer):
     """Storage Service Implementation"""
     
     def _get_user_from_session_token(self, session_token, db_session):
         """Get user from session token within the provided database session"""
         from db.models import Session as DBSession, User
-        # First get the session from the database
         db_session_obj = db_session.query(DBSession).filter_by(session_token=session_token).first()
         if not db_session_obj:
             return None
-        
-        # Then get the user associated with this session
         user = db_session.query(User).filter_by(user_id=db_session_obj.user_id).first()
         return user
     
@@ -831,14 +988,11 @@ class StorageServiceServicer(cloud_storage_pb2_grpc.StorageServiceServicer):
         try:
             session_token = request.session_token
             
-            # Create a new database session for the entire operation
             with get_db_session() as db_session:
-                # Get user from session token within this session
                 user = self._get_user_from_session_token(session_token, db_session)
                 if not user:
                     context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
                 
-                # Calculate storage info directly from the user object
                 allocated = user.storage_allocated
                 used = user.storage_used
                 available = max(0, allocated - used)
@@ -861,14 +1015,11 @@ class StorageServiceServicer(cloud_storage_pb2_grpc.StorageServiceServicer):
         try:
             session_token = request.session_token
             
-            # Create a new database session for the entire operation
             with get_db_session() as db_session:
-                # Get user from session token within this session
                 user = self._get_user_from_session_token(session_token, db_session)
                 if not user:
                     context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid session token")
                 
-                # Implementation for future enhancement
                 return cloud_storage_pb2.StorageUsageResponse(
                     success=True,
                     total_files=0,
@@ -878,6 +1029,8 @@ class StorageServiceServicer(cloud_storage_pb2_grpc.StorageServiceServicer):
         except Exception as e:
             print(f"[ERROR] Get storage usage failed: {e}")
             context.abort(grpc.StatusCode.INTERNAL, str(e))
+
+
 class NodeServiceServicer(cloud_storage_pb2_grpc.NodeServiceServicer):
     """Node Service Implementation (for nodes to communicate with gateway)"""
     
@@ -892,7 +1045,6 @@ class NodeServiceServicer(cloud_storage_pb2_grpc.NodeServiceServicer):
                 request.cpu_cores
             )
             
-            # Emit event with storage change info
             stats = node_manager.get_storage_statistics()
             if stats:
                 emit_event(
@@ -938,13 +1090,11 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
             if request.admin_key != ADMIN_KEY:
                 context.abort(grpc.StatusCode.PERMISSION_DENIED, "Invalid admin key")
             
-            # Get DYNAMIC storage statistics
             stats = node_manager.get_storage_statistics()
             
             if not stats:
                 context.abort(grpc.StatusCode.INTERNAL, "Failed to get statistics")
             
-            # Get file and chunk counts
             with get_db_session() as session:
                 from db.models import File, Chunk, User
                 
@@ -982,7 +1132,6 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
                 
                 user_list = []
                 for user in users:
-                    # Count files for each user
                     file_count = session.query(File).filter_by(
                         user_id=user.user_id,
                         deleted_at=None
@@ -1009,7 +1158,6 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
             context.abort(grpc.StatusCode.INTERNAL, str(e))
     
     def ListAllNodes(self, request, context):
-   
         try:
             if request.admin_key != ADMIN_KEY:
                 context.abort(grpc.StatusCode.PERMISSION_DENIED, "Invalid admin key")
@@ -1019,27 +1167,22 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
                 
                 nodes = session.query(StorageNode).all()
                 
-                # FIXED: Make online_threshold timezone-aware to match database timestamps
                 online_threshold = get_utcnow() - timedelta(minutes=2)
                 
                 node_list = []
                 for node in nodes:
-                    # Count chunks on this node
                     chunk_count = session.query(Chunk).filter_by(
                         primary_node_id=node.node_id
                     ).count()
                     
-                    # FIXED: Determine online status with proper timezone handling
-                    is_online = False
                     if node.last_heartbeat:
-                        # Make sure both datetimes have the same timezone awareness
                         if node.last_heartbeat.tzinfo is None:
-                            # If database timestamp is naive, make threshold naive too
                             threshold_naive = online_threshold.replace(tzinfo=None)
                             is_online = node.last_heartbeat > threshold_naive
                         else:
-                            # If database timestamp is aware, use aware threshold
                             is_online = node.last_heartbeat > online_threshold
+                    else:
+                        is_online = False
                     
                     status = 'online' if is_online else 'offline'
                     
@@ -1062,61 +1205,60 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
         
         except Exception as e:
             print(f"[ERROR] List nodes failed: {e}")
-            import traceback
             traceback.print_exc()
             context.abort(grpc.StatusCode.INTERNAL, str(e))
-        def GetUserDetails(self, request, context):
-            """Get detailed user information - NOW IMPLEMENTED"""
-            try:
-                if request.admin_key != ADMIN_KEY:
-                    context.abort(grpc.StatusCode.PERMISSION_DENIED, "Invalid admin key")
+        
+    def GetUserDetails(self, request, context):
+        """Get detailed user information - NOW IMPLEMENTED"""
+        try:
+            if request.admin_key != ADMIN_KEY:
+                context.abort(grpc.StatusCode.PERMISSION_DENIED, "Invalid admin key")
                 
-                user_id = request.user_id
-                
-                with get_db_session() as session:
-                    from db.models import User, File
-                    
-                    user = session.query(User).filter_by(user_id=user_id).first()
-                    
-                    if not user:
-                        context.abort(grpc.StatusCode.NOT_FOUND, "User not found")
-                    
-                    # Get user's files
-                    files = session.query(File).filter_by(
-                        user_id=user_id,
-                        deleted_at=None
-                    ).order_by(File.created_at.desc()).all()
-                    
-                    file_entries = []
-                    for file in files:
-                        file_entries.append(cloud_storage_pb2.FileEntry(
-                            file_id=file.file_id,
-                            filename=file.filename,
-                            file_size=file.file_size,
-                            mime_type=file.mime_type,
-                            created_at=file.created_at.isoformat(),
-                            modified_at=file.modified_at.isoformat(),
-                            is_shared=file.is_shared
-                        ))
-                    
-                    return cloud_storage_pb2.UserDetailsResponse(
-                        success=True,
-                        user=cloud_storage_pb2.UserInfo(
-                            user_id=user.user_id,
-                            email=user.email,
-                            name=user.name,
-                            storage_allocated=user.storage_allocated,
-                            storage_used=user.storage_used,
-                            created_at=user.created_at.isoformat(),
-                            last_login=user.last_login.isoformat() if user.last_login else "",
-                            file_count=len(files)
-                        ),
-                        files=file_entries
-                    )
+            user_id = request.user_id
             
-            except Exception as e:
-                print(f"[ERROR] Get user details failed: {e}")
-                context.abort(grpc.StatusCode.INTERNAL, str(e))
+            with get_db_session() as session:
+                from db.models import User, File
+                
+                user = session.query(User).filter_by(user_id=user_id).first()
+                
+                if not user:
+                    context.abort(grpc.StatusCode.NOT_FOUND, "User not found")
+                
+                files = session.query(File).filter_by(
+                    user_id=user_id,
+                    deleted_at=None
+                ).order_by(File.created_at.desc()).all()
+                
+                file_entries = []
+                for file in files:
+                    file_entries.append(cloud_storage_pb2.FileEntry(
+                        file_id=file.file_id,
+                        filename=file.filename,
+                        file_size=file.file_size,
+                        mime_type=file.mime_type,
+                        created_at=file.created_at.isoformat(),
+                        modified_at=file.modified_at.isoformat(),
+                        is_shared=file.is_shared
+                    ))
+                
+                return cloud_storage_pb2.UserDetailsResponse(
+                    success=True,
+                    user=cloud_storage_pb2.UserInfo(
+                        user_id=user.user_id,
+                        email=user.email,
+                        name=user.name,
+                        storage_allocated=user.storage_allocated,
+                        storage_used=user.storage_used,
+                        created_at=user.created_at.isoformat(),
+                        last_login=user.last_login.isoformat() if user.last_login else "",
+                        file_count=len(files)
+                    ),
+                    files=file_entries
+                )
+            
+        except Exception as e:
+            print(f"[ERROR] Get user details failed: {e}")
+            context.abort(grpc.StatusCode.INTERNAL, str(e))
         
     def StreamSystemEvents(self, request, context):
         """Stream real-time system events"""
@@ -1126,23 +1268,19 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
             
             print("[ADMIN] Event streaming started")
             
-            # Send a keepalive event every 60 seconds (reduced frequency)
             last_keepalive = datetime.now()
             keepalive_interval = timedelta(seconds=60)
             
             while context.is_active():
                 try:
-                    # Try to get an event from the queue with longer timeout to reduce CPU usage
                     event = event_queue.get(timeout=2.0)
                     print(f"[ADMIN] Streaming event: {event.event_type}")
                     yield event
                     last_keepalive = datetime.now()
                     
                 except queue.Empty:
-                    # Queue is empty, check if we need to send keepalive
                     now = datetime.now()
                     if now - last_keepalive > keepalive_interval:
-                        # Send a keepalive event (suppress logging to reduce noise)
                         keepalive = cloud_storage_pb2.SystemEvent(
                             event_type='KEEPALIVE',
                             timestamp=now.isoformat(),
@@ -1152,8 +1290,6 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
                         )
                         yield keepalive
                         last_keepalive = now
-                    
-                    # Continue the loop
                     continue
                     
                 except Exception as e:
@@ -1164,7 +1300,6 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
         
         except Exception as e:
             print(f"[ERROR] Event stream failed: {e}")
-            import traceback
             traceback.print_exc()
     
     def UpdateGlobalStorage(self, request, context):
@@ -1173,8 +1308,6 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
             if request.admin_key != ADMIN_KEY:
                 context.abort(grpc.StatusCode.PERMISSION_DENIED, "Invalid admin key")
             
-            # This is now handled dynamically by nodes
-            # So we just return current stats
             stats = node_manager.get_storage_statistics()
             
             return cloud_storage_pb2.UpdateStorageResponse(
@@ -1188,11 +1321,71 @@ class AdminServiceServicer(cloud_storage_pb2_grpc.AdminServiceServicer):
             print(f"[ERROR] Update storage failed: {e}")
             context.abort(grpc.StatusCode.INTERNAL, str(e))
 
+    def GetPaymentStats(self, request, context):
+        """Get payment statistics (admin)"""
+        try:
+            if request.admin_key != ADMIN_KEY:
+                context.abort(grpc.StatusCode.PERMISSION_DENIED, "Invalid admin key")
+           
+            from payment.payment_manager import payment_manager
+            stats = payment_manager.get_payment_stats()
+           
+            return cloud_storage_pb2.PaymentStatsResponse(
+                success=True,
+                total_payments=stats.get('total_payments', 0),
+                completed_payments=stats.get('completed_payments', 0),
+                pending_payments=stats.get('pending_payments', 0),
+                failed_payments=stats.get('failed_payments', 0),
+                total_revenue_xaf=stats.get('total_revenue_xaf', 0),
+                total_storage_sold_bytes=stats.get('total_storage_sold_bytes', 0)
+            )
+       
+        except Exception as e:
+            print(f"[ERROR] Get payment stats failed: {e}")
+            context.abort(grpc.StatusCode.INTERNAL, str(e))
+   
+    def GetAllPayments(self, request, context):
+        """Get all payments (admin)"""
+        try:
+            if request.admin_key != ADMIN_KEY:
+                context.abort(grpc.StatusCode.PERMISSION_DENIED, "Invalid admin key")
+           
+            limit = request.limit if request.limit > 0 else 100
+            status_filter = request.status_filter if request.status_filter else None
+           
+            from payment.payment_manager import payment_manager
+            payments = payment_manager.get_all_payments(limit, status_filter)
+           
+            payment_records = []
+            for p in payments:
+                payment_records.append(cloud_storage_pb2.AdminPaymentRecord(
+                    payment_id=p['payment_id'],
+                    user_email=p['user_email'],
+                    tier_name=p['tier_name'],
+                    amount_xaf=p['amount_xaf'],
+                    storage_bytes=p['storage_bytes'],
+                    provider=p['provider'],
+                    phone_number=p['phone_number'],
+                    status=p['status'],
+                    transaction_ref=p['transaction_ref'],
+                    created_at=p['created_at'],
+                    completed_at=p['completed_at'] or ''
+                ))
+           
+            return cloud_storage_pb2.GetAllPaymentsResponse(
+                success=True,
+                payments=payment_records
+            )
+       
+        except Exception as e:
+            print(f"[ERROR] Get all payments failed: {e}")
+            context.abort(grpc.StatusCode.INTERNAL, str(e))
+
 
 def serve():
     """Start the cloud server"""
     print("=" * 70)
-    print("CLOUD STORAGE PLATFORM - SERVER (DYNAMIC STORAGE)")
+    print("CLOUD STORAGE PLATFORM - SERVER (DYNAMIC STORAGE + PAYMENT SYSTEM)")
     print("=" * 70)
     
     # Initialize database
@@ -1227,6 +1420,11 @@ def serve():
         AdminServiceServicer(), server
     )
     
+    # ADD THIS LINE - Payment Service Registration
+    cloud_storage_pb2_grpc.add_PaymentServiceServicer_to_server(
+        PaymentServiceServicer(), server
+    )
+    
     # Start server
     port = os.getenv('GRPC_SERVER_PORT', '50051')
     server.add_insecure_port(f'[::]:{port}')
@@ -1234,7 +1432,7 @@ def serve():
     print(f"Server listening on port {port}")
     print(f"Admin Key: {ADMIN_KEY}")
     print("=" * 70)
-    print("\n[READY] Cloud server is ready to accept connections")
+    print("\n[READY] Cloud server with Payment System is ready to accept connections")
     print("[INFO] Global storage grows automatically as nodes register!\n")
     
     server.start()

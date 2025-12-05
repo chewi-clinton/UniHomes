@@ -27,10 +27,12 @@ def create_app(config_class=Config):
     from app.files.routes import files_bp
     from app.storage.routes import storage_bp
     from app.admin.routes import admin_bp
+    from app.payment.routes import payment_bp
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(files_bp, url_prefix='/api/files')
     app.register_blueprint(storage_bp, url_prefix='/api/storage')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
+    app.register_blueprint(payment_bp, url_prefix='/api/payment')
     
     return app
