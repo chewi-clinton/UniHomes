@@ -5,12 +5,14 @@ A beautiful, performant, and feature-rich cloud storage web application built wi
 ## ✨ Features
 
 ### 🔐 Authentication
+
 - **Secure OTP-based authentication** - No passwords required
 - **Beautiful 6-digit OTP input** with paste support
 - **Session management** with automatic token refresh
 - **User enrollment** for new users
 
 ### 📁 File Management
+
 - **Drag & drop file upload** with progress tracking
 - **Multiple file upload** support
 - **Folder creation** and navigation
@@ -20,12 +22,14 @@ A beautiful, performant, and feature-rich cloud storage web application built wi
 - **Search functionality** across all files
 
 ### 📊 Storage Analytics
+
 - **Storage usage visualization** with interactive charts
 - **File type breakdown** with detailed statistics
 - **Storage quota monitoring** with visual indicators
 - **Recent files** tracking
 
 ### 🛠️ Admin Panel
+
 - **Real-time system monitoring** with Server-Sent Events (SSE)
 - **User management** interface
 - **Storage nodes** health monitoring
@@ -33,6 +37,7 @@ A beautiful, performant, and feature-rich cloud storage web application built wi
 - **Auto-reconnect** for SSE connections
 
 ### 🎨 Design & UX
+
 - **Modern, clean interface** inspired by 2025 design trends
 - **Dark mode support** with smooth transitions
 - **Responsive design** for all screen sizes
@@ -41,6 +46,7 @@ A beautiful, performant, and feature-rich cloud storage web application built wi
 - **Toast notifications** for user feedback
 
 ### ⌨️ Keyboard Shortcuts
+
 - `↑/↓` - Navigate through files
 - `Enter` - Open selected file/folder
 - `Delete` - Delete selected file
@@ -48,6 +54,7 @@ A beautiful, performant, and feature-rich cloud storage web application built wi
 - `Escape` - Clear selection/close modals
 
 ### 🎯 Additional Features
+
 - **Breadcrumb navigation** for easy folder navigation
 - **File download** with progress tracking
 - **File deletion** with confirmation
@@ -58,18 +65,21 @@ A beautiful, performant, and feature-rich cloud storage web application built wi
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - Node.js 16+ and npm/yarn
 - Backend API running on `http://localhost:8000`
 
 ### Installation
 
 1. **Clone the repository**
+
    ```bash
    git clone <repository-url>
    cd cloud-storage-frontend
    ```
 
 2. **Install dependencies**
+
    ```bash
    npm install
    # or
@@ -77,6 +87,7 @@ A beautiful, performant, and feature-rich cloud storage web application built wi
    ```
 
 3. **Start the development server**
+
    ```bash
    npm run dev
    # or
@@ -132,6 +143,7 @@ src/
 ## 🔧 Configuration
 
 ### API Base URL
+
 The API base URL is configured in `src/services/api.js`. For development, it uses Vite's proxy configuration in `vite.config.js`:
 
 ```javascript
@@ -139,16 +151,17 @@ The API base URL is configured in `src/services/api.js`. For development, it use
 export default defineConfig({
   server: {
     proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
+      "/api": {
+        target: "http://localhost:8000",
         changeOrigin: true,
-      }
-    }
-  }
-})
+      },
+    },
+  },
+});
 ```
 
 ### Environment Variables
+
 Create a `.env` file in the root directory for environment-specific configuration:
 
 ```env
@@ -161,6 +174,7 @@ VITE_APP_NAME=CloudDrive
 The application supports both light and dark modes with smooth transitions. The theme is managed through the `ThemeContext` and uses CSS custom properties for dynamic theming.
 
 ### Adding New Themes
+
 1. Update the color variables in `src/index.css`
 2. Extend the theme context in `src/contexts/ThemeContext.jsx`
 3. Add theme toggle controls in the UI
@@ -168,11 +182,13 @@ The application supports both light and dark modes with smooth transitions. The 
 ## 📱 Responsive Design
 
 The application is fully responsive and optimized for:
+
 - **Desktop** (1200px+)
 - **Tablet** (768px - 1199px)
 - **Mobile** (< 768px)
 
 Key responsive features:
+
 - Collapsible sidebar on mobile
 - Adaptive grid layouts
 - Touch-friendly interface elements
@@ -206,6 +222,7 @@ yarn test
 ```
 
 ### Test Coverage
+
 - Component rendering tests
 - Authentication flow tests
 - API integration tests
@@ -234,8 +251,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-For support, email support@clouddrive.com or join our Slack channel.
+For support, email support@FileSphere.com or join our Slack channel.
 
 ---
 
-**Built with ❤️ by the CloudDrive Team**
+**Built with ❤️ by the FileShpere Team**
